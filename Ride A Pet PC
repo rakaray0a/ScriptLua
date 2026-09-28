@@ -1,0 +1,144 @@
+local UserInputService = game:GetService("UserInputService")
+local Players = game:GetService("Players")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Variabel Teleport 1
+local targetPart1 = workspace:WaitForChild("Plots"):WaitForChild("Plot"):WaitForChild("Baseplate")
+
+-- Variabel Teleport 2 
+local targetPart2 = workspace:WaitForChild("Volcano"):WaitForChild("VolcanoEntrance")
+
+-- Variabel ESP
+local renderedEggsFolder = workspace:WaitForChild("RenderedEggs")
+local espEnabled = false
+local espGuis = {} 
+local nameColors = {} 
+
+-- Fungsi untuk mendapatkan warna tetap berdasarkan nama model
+local function getColorForName(name)
+	if not nameColors[name] then
+		local nameValue = 0
+		for i = 1, #name do
+			nameValue = nameValue + string.byte(name, i)
+		end
+		
+		local hue = (nameValue % 360) / 360
+		nameColors[name] = Color3.fromHSV(hue, 1, 1)
+	end
+	return nameColors[name]
+end
+
+local function toggleESP()
+	espEnabled = not espEnabled
+	
+	if espEnabled then
+		for _, child in ipairs(renderedEggsFolder:GetChildren()) do
+			if child:IsA("Model") then
+				local attachPart = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)
+				
+				if attachPart then
+					local billboard = Instance.new("BillboardGui")
+					billboard.Name = "TextESP_" .. child.Name
+					billboard.Adornee = attachPart
+					billboard.Size = UDim2.new(0, 100, 0, 25)
+					billboard.StudsOffset = Vector3.new(0, 1.5, 0) 
+					billboard.AlwaysOnTop = true 
+					
+					local textLabel = Instance.new("TextLabel")
+					textLabel.Parent = billboard
+					textLabel.Size = UDim2.new(1, 0, 1, 0)
+					textLabel.BackgroundTransparency = 1
+					textLabel.Text = child.Name
+					
+					textLabel.TextColor3 = getColorForName(child.Name) 
+					
+					textLabel.TextScaled = false
+					textLabel.TextSize = 14 
+					textLabel.Font = Enum.Font.GothamBold
+					textLabel.TextStrokeTransparency = 0
+					textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+					
+					billboard.Parent = playerGui 
+					
+					table.insert(espGuis, billboard)
+				end
+			end
+		end
+	else
+		for _, gui in ipairs(espGuis) do
+			if gui then
+				gui:Destroy()
+			end
+		end
+		table.clear(espGuis)
+	end
+end
+
+-- Fungsi untuk mengubah Speed Player dan Pet secara universal
+local function adjustSpeed(amount)
+	local character = player.Character or player.CharacterAdded:Wait()
+	local humanoid = character:FindFirstChild("Humanoid")
+	
+	if humanoid then
+		humanoid.WalkSpeed = math.max(0, humanoid.WalkSpeed + amount)
+		
+		if humanoid.SeatPart and humanoid.SeatPart:IsA("VehicleSeat") then
+			humanoid.SeatPart.MaxSpeed = math.max(0, humanoid.SeatPart.MaxSpeed + amount)
+		end
+	end
+end
+
+UserInputService.InputBegan:Connect(function(input, gameProcessedEvent)
+	if gameProcessedEvent then return end
+	
+	-- Fitur Kecepatan (Instan, tidak perlu ditahan)
+	if input.KeyCode == Enum.KeyCode.O then
+		adjustSpeed(-1)
+		return
+	elseif input.KeyCode == Enum.KeyCode.P then
+		adjustSpeed(1)
+		return
+	end
+
+	-- Deteksi tombol yang membutuhkan waktu tahan
+	local isHoldKey = (input.KeyCode == Enum.KeyCode.BackSlash) or 
+					  (input.KeyCode == Enum.KeyCode.Equals) or 
+					  (input.KeyCode == Enum.KeyCode.RightBracket)
+
+	if isHoldKey then
+		local heldTime = 0
+		
+		-- Loop ini akan terus berjalan HANYA selama tombol masih ditahan
+		while UserInputService:IsKeyDown(input.KeyCode) do
+			-- Menambah waktu berdasarkan durasi setiap frame
+			heldTime = heldTime + task.wait()
+			
+			-- Jika waktu tahan sudah mencapai 5 detik atau lebih
+			if heldTime >= 3 then
+				
+				if input.KeyCode == Enum.KeyCode.BackSlash then
+					local character = player.Character or player.CharacterAdded:Wait()
+					local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+					if humanoidRootPart and targetPart1 then
+						humanoidRootPart.CFrame = targetPart1.CFrame + Vector3.new(0, 3, 0)
+					end
+					
+				elseif input.KeyCode == Enum.KeyCode.Equals then
+					local character = player.Character or player.CharacterAdded:Wait()
+					local humanoidRootPart = character:FindFirstChild("HumanoidRootPart")
+					if humanoidRootPart and targetPart2 then
+						humanoidRootPart.CFrame = targetPart2.CFrame + Vector3.new(0, 3, 0)
+					end
+					
+				elseif input.KeyCode == Enum.KeyCode.RightBracket then
+					toggleESP()
+				end
+				
+				-- Hentikan loop agar perintah tidak dieksekusi berkali-kali saat tombol masih ditahan setelah detik ke-5
+				break 
+			end
+		end
+	end
+end)
