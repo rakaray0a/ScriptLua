@@ -1,7 +1,6 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local RunService = game:GetService("RunService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -16,8 +15,8 @@ local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 300, 0, 350)
 mainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
-mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20) -- Dark mode base
-mainFrame.BackgroundTransparency = 0.3 -- Glassmorphism effect
+mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+mainFrame.BackgroundTransparency = 0.3
 mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
 
@@ -42,7 +41,6 @@ local topBarCorner = Instance.new("UICorner")
 topBarCorner.CornerRadius = UDim.new(0, 12)
 topBarCorner.Parent = topBar
 
--- Menutup sudut bawah topbar agar rata dengan frame
 local topBarBlock = Instance.new("Frame")
 topBarBlock.Size = UDim2.new(1, 0, 0, 10)
 topBarBlock.Position = UDim2.new(0, 0, 1, -10)
@@ -89,7 +87,7 @@ listLayout.Padding = UDim.new(0, 10)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = contentFrame
 
--- Handle Resize di pojok kanan bawah
+-- Handle Resize
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Size = UDim2.new(0, 20, 0, 20)
 resizeHandle.Position = UDim2.new(1, -20, 1, -20)
@@ -100,10 +98,7 @@ resizeHandle.TextTransparency = 0.5
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
--- 4. Fungsi-fungsi Game (Teleport, ESP, Speed)
-local targetPart1 = workspace:WaitForChild("Plots"):WaitForChild("Plot"):WaitForChild("Baseplate")
-local targetPart2 = workspace:WaitForChild("Volcano"):WaitForChild("VolcanoEntrance")
-local renderedEggsFolder = workspace:WaitForChild("RenderedEggs")
+-- 4. Variabel Data & Fungsi Inti
 local espEnabled = false
 local espGuis = {}
 local nameColors = {}
@@ -119,7 +114,15 @@ end
 
 local function toggleESP()
 	espEnabled = not espEnabled
+	
 	if espEnabled then
+		-- Mencari folder saat tombol diklik agar tidak memblokir UI di awal
+		local renderedEggsFolder = workspace:FindFirstChild("RenderedEggs")
+		if not renderedEggsFolder then 
+			warn("Folder RenderedEggs tidak ditemukan!") 
+			return 
+		end
+
 		for _, child in ipairs(renderedEggsFolder:GetChildren()) do
 			if child:IsA("Model") then
 				local attachPart = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)
@@ -141,7 +144,7 @@ local function toggleESP()
 					textLabel.TextStrokeTransparency = 0
 					textLabel.Parent = billboard
 					
-					billboard.Parent = playerGui
+					billboard.Parent = screenGui
 					table.insert(espGuis, billboard)
 				end
 			end
@@ -153,7 +156,8 @@ local function toggleESP()
 end
 
 local function adjustSpeed(amount)
-	local char = player.Character or player.CharacterAdded:Wait()
+	local char = player.Character
+	if not char then return end
 	local hum = char:FindFirstChild("Humanoid")
 	if hum then
 		hum.WalkSpeed = math.max(0, hum.WalkSpeed + amount)
@@ -178,7 +182,6 @@ local function createButton(text, parent)
 	
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 	
-	-- Animasi Hover
 	btn.MouseEnter:Connect(function()
 		TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.7}):Play()
 	end)
@@ -188,7 +191,6 @@ local function createButton(text, parent)
 	return btn
 end
 
--- Container Speed agar bersebelahan
 local speedContainer = Instance.new("Frame")
 speedContainer.Size = UDim2.new(1, 0, 0, 45)
 speedContainer.BackgroundTransparency = 1
@@ -205,18 +207,23 @@ local btnTeleport1 = createButton("Teleport: Plot", contentFrame)
 local btnTeleport2 = createButton("Teleport: Volcano", contentFrame)
 local btnESP = createButton("Toggle ESP", contentFrame)
 
--- Mapping Fungsi Tombol (Langsung instan tanpa hold 5 detik untuk UI)
+-- Event Tombol
 btnTeleport1.MouseButton1Click:Connect(function()
-	local char = player.Character or player.CharacterAdded:Wait()
-	if char:FindFirstChild("HumanoidRootPart") and targetPart1 then
-		char.HumanoidRootPart.CFrame = targetPart1.CFrame + Vector3.new(0, 3, 0)
+	local char = player.Character
+	-- Mengecek map secara dinamis saat tombol ditekan
+	local plots = workspace:FindFirstChild("Plots")
+	if char and plots and plots:FindFirstChild("Plot") and plots.Plot:FindFirstChild("Baseplate") then
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if root then root.CFrame = plots.Plot.Baseplate.CFrame + Vector3.new(0, 3, 0) end
 	end
 end)
 
 btnTeleport2.MouseButton1Click:Connect(function()
-	local char = player.Character or player.CharacterAdded:Wait()
-	if char:FindFirstChild("HumanoidRootPart") and targetPart2 then
-		char.HumanoidRootPart.CFrame = targetPart2.CFrame + Vector3.new(0, 3, 0)
+	local char = player.Character
+	local volcano = workspace:FindFirstChild("Volcano")
+	if char and volcano and volcano:FindFirstChild("VolcanoEntrance") then
+		local root = char:FindFirstChild("HumanoidRootPart")
+		if root then root.CFrame = volcano.VolcanoEntrance.CFrame + Vector3.new(0, 3, 0) end
 	end
 end)
 
@@ -224,7 +231,7 @@ btnESP.MouseButton1Click:Connect(toggleESP)
 btnSpeedMinus.MouseButton1Click:Connect(function() adjustSpeed(-1) end)
 btnSpeedPlus.MouseButton1Click:Connect(function() adjustSpeed(1) end)
 
--- 6. Logika UI: Minimize, Drag, dan Resize
+-- 6. Interaktivitas UI (Minimize, Drag, Resize)
 local minimized = false
 minimizeBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
@@ -234,7 +241,6 @@ minimizeBtn.MouseButton1Click:Connect(function()
 	}):Play()
 end)
 
--- Dragging
 local dragging, dragInput, dragStart, startPos
 topBar.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -260,7 +266,6 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
--- Resizing
 local resizing = false
 resizeHandle.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -278,7 +283,6 @@ UserInputService.InputChanged:Connect(function(input)
 	if resizing and not minimized and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local deltaX = input.Position.X - mainFrame.AbsolutePosition.X
 		local deltaY = input.Position.Y - mainFrame.AbsolutePosition.Y
-		-- Membatasi ukuran minimum dan maksimum UI
 		mainFrame.Size = UDim2.new(0, math.clamp(deltaX, 250, 600), 0, math.clamp(deltaY, 200, 800))
 	end
 end)
