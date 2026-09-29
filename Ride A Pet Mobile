@@ -1,6 +1,7 @@
 local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local Workspace = game:GetService("Workspace")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -20,9 +21,7 @@ mainFrame.BackgroundTransparency = 0.3
 mainFrame.ClipsDescendants = true
 mainFrame.Parent = screenGui
 
-local uiCorner = Instance.new("UICorner")
-uiCorner.CornerRadius = UDim.new(0, 12)
-uiCorner.Parent = mainFrame
+Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 12)
 
 local uiStroke = Instance.new("UIStroke")
 uiStroke.Color = Color3.fromRGB(255, 255, 255)
@@ -37,9 +36,7 @@ topBar.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 topBar.BackgroundTransparency = 0.2
 topBar.Parent = mainFrame
 
-local topBarCorner = Instance.new("UICorner")
-topBarCorner.CornerRadius = UDim.new(0, 12)
-topBarCorner.Parent = topBar
+Instance.new("UICorner", topBar).CornerRadius = UDim.new(0, 12)
 
 local topBarBlock = Instance.new("Frame")
 topBarBlock.Size = UDim2.new(1, 0, 0, 10)
@@ -72,7 +69,7 @@ minimizeBtn.TextSize = 18
 minimizeBtn.Parent = topBar
 Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 8)
 
--- 3. Area Konten
+-- 3. Area Konten & Resize Handle
 local contentFrame = Instance.new("ScrollingFrame")
 contentFrame.Size = UDim2.new(1, -20, 1, -60)
 contentFrame.Position = UDim2.new(0, 10, 0, 50)
@@ -87,7 +84,6 @@ listLayout.Padding = UDim.new(0, 10)
 listLayout.SortOrder = Enum.SortOrder.LayoutOrder
 listLayout.Parent = contentFrame
 
--- Handle Resize
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Size = UDim2.new(0, 20, 0, 20)
 resizeHandle.Position = UDim2.new(1, -20, 1, -20)
@@ -98,63 +94,7 @@ resizeHandle.TextTransparency = 0.5
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
--- 4. Variabel Data & Fungsi Inti
-local espEnabled = false
-local espGuis = {}
-local nameColors = {}
-
-local function getColorForName(name)
-	if not nameColors[name] then
-		local nameValue = 0
-		for i = 1, #name do nameValue = nameValue + string.byte(name, i) end
-		nameColors[name] = Color3.fromHSV((nameValue % 360) / 360, 1, 1)
-	end
-	return nameColors[name]
-end
-
-local function toggleESP()
-	espEnabled = not espEnabled
-	
-	if espEnabled then
-		-- Mencari folder saat tombol diklik agar tidak memblokir UI di awal
-		local renderedEggsFolder = workspace:FindFirstChild("RenderedEggs")
-		if not renderedEggsFolder then 
-			warn("Folder RenderedEggs tidak ditemukan!") 
-			return 
-		end
-
-		for _, child in ipairs(renderedEggsFolder:GetChildren()) do
-			if child:IsA("Model") then
-				local attachPart = child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)
-				if attachPart then
-					local billboard = Instance.new("BillboardGui")
-					billboard.Adornee = attachPart
-					billboard.Size = UDim2.new(0, 100, 0, 25)
-					billboard.StudsOffset = Vector3.new(0, 1.5, 0)
-					billboard.AlwaysOnTop = true
-					
-					local textLabel = Instance.new("TextLabel")
-					textLabel.Size = UDim2.new(1, 0, 1, 0)
-					textLabel.BackgroundTransparency = 1
-					textLabel.Text = child.Name
-					textLabel.TextColor3 = getColorForName(child.Name)
-					textLabel.TextScaled = false
-					textLabel.TextSize = 14
-					textLabel.Font = Enum.Font.GothamBold
-					textLabel.TextStrokeTransparency = 0
-					textLabel.Parent = billboard
-					
-					billboard.Parent = screenGui
-					table.insert(espGuis, billboard)
-				end
-			end
-		end
-	else
-		for _, gui in ipairs(espGuis) do if gui then gui:Destroy() end end
-		table.clear(espGuis)
-	end
-end
-
+-- 4. Logika Game (Speed, Teleport, ESP Auto-Refresh)
 local function adjustSpeed(amount)
 	local char = player.Character
 	if not char then return end
@@ -167,7 +107,97 @@ local function adjustSpeed(amount)
 	end
 end
 
--- 5. Pembuatan Tombol UI
+-- Variabel ESP
+local espEnabled = false
+local activeESPs = {}
+local nameColors = {}
+
+local function getColorForName(name)
+	if not nameColors[name] then
+		local nameValue = 0
+		for i = 1, #name do nameValue = nameValue + string.byte(name, i) end
+		nameColors[name] = Color3.fromHSV((nameValue % 360) / 360, 1, 1)
+	end
+	return nameColors[name]
+end
+
+local function refreshESP()
+	-- Jika ESP mati, bersihkan semua highlight & teks
+	if not espEnabled then
+		for egg, espData in pairs(activeESPs) do
+			if espData.Highlight then espData.Highlight:Destroy() end
+			if espData.Billboard then espData.Billboard:Destroy() end
+		end
+		table.clear(activeESPs)
+		return
+	end
+
+	local renderedEggsFolder = Workspace:FindFirstChild("RenderedEggs")
+	if not renderedEggsFolder then return end
+
+	-- 1. Bersihkan ESP dari Egg yang sudah hilang/diambil
+	for egg, espData in pairs(activeESPs) do
+		if not egg or not egg.Parent then
+			if espData.Highlight then espData.Highlight:Destroy() end
+			if espData.Billboard then espData.Billboard:Destroy() end
+			activeESPs[egg] = nil
+		end
+	end
+
+	-- 2. Tambahkan ESP ke Egg yang baru muncul
+	for _, child in ipairs(renderedEggsFolder:GetChildren()) do
+		if child:IsA("Model") or child:IsA("BasePart") then
+			if not activeESPs[child] then
+				local attachPart = child:IsA("Model") and (child.PrimaryPart or child:FindFirstChildWhichIsA("BasePart", true)) or child
+				
+				if attachPart then
+					local itemColor = getColorForName(child.Name)
+					
+					-- Highlight agar menembus tembok
+					local highlight = Instance.new("Highlight")
+					highlight.FillColor = itemColor
+					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+					highlight.FillTransparency = 0.5
+					highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
+					highlight.Parent = child
+					
+					-- Teks nama
+					local billboard = Instance.new("BillboardGui")
+					billboard.Adornee = attachPart
+					billboard.Size = UDim2.new(0, 100, 0, 25)
+					billboard.StudsOffset = Vector3.new(0, 1.5, 0)
+					billboard.AlwaysOnTop = true
+					
+					local textLabel = Instance.new("TextLabel")
+					textLabel.Size = UDim2.new(1, 0, 1, 0)
+					textLabel.BackgroundTransparency = 1
+					textLabel.Text = child.Name
+					textLabel.TextColor3 = itemColor
+					textLabel.TextScaled = false
+					textLabel.TextSize = 14
+					textLabel.Font = Enum.Font.GothamBold
+					textLabel.TextStrokeTransparency = 0
+					textLabel.Parent = billboard
+					
+					billboard.Parent = screenGui
+					
+					-- Simpan referensi ke dalam tabel
+					activeESPs[child] = {Highlight = highlight, Billboard = billboard}
+				end
+			end
+		end
+	end
+end
+
+-- Loop otomatis ESP setiap 0.5 detik
+task.spawn(function()
+	while true do
+		refreshESP()
+		task.wait(0.5)
+	end
+end)
+
+-- 5. Pembuatan & Fungsi Tombol UI
 local function createButton(text, parent)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(1, 0, 0, 45)
@@ -182,12 +212,8 @@ local function createButton(text, parent)
 	
 	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
 	
-	btn.MouseEnter:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.7}):Play()
-	end)
-	btn.MouseLeave:Connect(function()
-		TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.9}):Play()
-	end)
+	btn.MouseEnter:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.7}):Play() end)
+	btn.MouseLeave:Connect(function() TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundTransparency = 0.9}):Play() end)
 	return btn
 end
 
@@ -205,13 +231,15 @@ btnSpeedPlus.Position = UDim2.new(0.52, 0, 0, 0)
 
 local btnTeleport1 = createButton("Teleport: Plot", contentFrame)
 local btnTeleport2 = createButton("Teleport: Volcano", contentFrame)
-local btnESP = createButton("Toggle ESP", contentFrame)
+local btnESP = createButton("Toggle ESP (OFF)", contentFrame)
 
--- Event Tombol
+-- Event Tombol Fungsi
+btnSpeedMinus.MouseButton1Click:Connect(function() adjustSpeed(-1) end)
+btnSpeedPlus.MouseButton1Click:Connect(function() adjustSpeed(1) end)
+
 btnTeleport1.MouseButton1Click:Connect(function()
 	local char = player.Character
-	-- Mengecek map secara dinamis saat tombol ditekan
-	local plots = workspace:FindFirstChild("Plots")
+	local plots = Workspace:FindFirstChild("Plots")
 	if char and plots and plots:FindFirstChild("Plot") and plots.Plot:FindFirstChild("Baseplate") then
 		local root = char:FindFirstChild("HumanoidRootPart")
 		if root then root.CFrame = plots.Plot.Baseplate.CFrame + Vector3.new(0, 3, 0) end
@@ -220,16 +248,19 @@ end)
 
 btnTeleport2.MouseButton1Click:Connect(function()
 	local char = player.Character
-	local volcano = workspace:FindFirstChild("Volcano")
+	local volcano = Workspace:FindFirstChild("Volcano")
 	if char and volcano and volcano:FindFirstChild("VolcanoEntrance") then
 		local root = char:FindFirstChild("HumanoidRootPart")
 		if root then root.CFrame = volcano.VolcanoEntrance.CFrame + Vector3.new(0, 3, 0) end
 	end
 end)
 
-btnESP.MouseButton1Click:Connect(toggleESP)
-btnSpeedMinus.MouseButton1Click:Connect(function() adjustSpeed(-1) end)
-btnSpeedPlus.MouseButton1Click:Connect(function() adjustSpeed(1) end)
+btnESP.MouseButton1Click:Connect(function()
+	espEnabled = not espEnabled
+	btnESP.Text = espEnabled and "Toggle ESP (ON)" or "Toggle ESP (OFF)"
+	btnESP.TextColor3 = espEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 255, 255)
+	refreshESP() -- Paksa refresh instan saat tombol ditekan
+end)
 
 -- 6. Interaktivitas UI (Minimize, Drag, Resize)
 local minimized = false
@@ -247,16 +278,12 @@ topBar.InputBegan:Connect(function(input)
 		dragging = true
 		dragStart = input.Position
 		startPos = mainFrame.Position
-		input.Changed:Connect(function()
-			if input.UserInputState == Enum.UserInputState.End then dragging = false end
-		end)
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
 	end
 end)
 
 topBar.InputChanged:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
-		dragInput = input
-	end
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then dragInput = input end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
@@ -268,15 +295,11 @@ end)
 
 local resizing = false
 resizeHandle.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		resizing = true
-	end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then resizing = true end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		resizing = false
-	end
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then resizing = false end
 end)
 
 UserInputService.InputChanged:Connect(function(input)
