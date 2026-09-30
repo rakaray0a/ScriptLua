@@ -2,6 +2,7 @@ local Players = game:GetService("Players")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local Workspace = game:GetService("Workspace")
+local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -14,8 +15,8 @@ screenGui.Parent = playerGui
 
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 300, 0, 350)
-mainFrame.Position = UDim2.new(0.5, -150, 0.5, -175)
+mainFrame.Size = UDim2.new(0, 300, 0, 400) -- Disesuaikan ukurannya untuk tombol tambahan
+mainFrame.Position = UDim2.new(0.5, -150, 0.5, -200)
 mainFrame.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
 mainFrame.BackgroundTransparency = 0.3
 mainFrame.ClipsDescendants = true
@@ -94,7 +95,18 @@ resizeHandle.TextTransparency = 0.5
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
--- 4. Logika Game (Speed, Teleport, ESP Auto-Refresh)
+-- 4. Fitur Anti-AFK (Otomatis On)
+local antiAfkEnabled = true
+
+player.Idled:Connect(function()
+	if antiAfkEnabled then
+		VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+		task.wait(1)
+		VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+	end
+end)
+
+-- 5. Logika Game (Speed, Teleport, ESP Auto-Refresh)
 local function adjustSpeed(amount)
 	local char = player.Character
 	if not char then return end
@@ -122,7 +134,6 @@ local function getColorForName(name)
 end
 
 local function refreshESP()
-	-- Jika ESP mati, bersihkan semua highlight & teks
 	if not espEnabled then
 		for egg, espData in pairs(activeESPs) do
 			if espData.Highlight then espData.Highlight:Destroy() end
@@ -135,7 +146,6 @@ local function refreshESP()
 	local renderedEggsFolder = Workspace:FindFirstChild("RenderedEggs")
 	if not renderedEggsFolder then return end
 
-	-- 1. Bersihkan ESP dari Egg yang sudah hilang/diambil
 	for egg, espData in pairs(activeESPs) do
 		if not egg or not egg.Parent then
 			if espData.Highlight then espData.Highlight:Destroy() end
@@ -144,7 +154,6 @@ local function refreshESP()
 		end
 	end
 
-	-- 2. Tambahkan ESP ke Egg yang baru muncul
 	for _, child in ipairs(renderedEggsFolder:GetChildren()) do
 		if child:IsA("Model") or child:IsA("BasePart") then
 			if not activeESPs[child] then
@@ -153,7 +162,6 @@ local function refreshESP()
 				if attachPart then
 					local itemColor = getColorForName(child.Name)
 					
-					-- Highlight agar menembus tembok
 					local highlight = Instance.new("Highlight")
 					highlight.FillColor = itemColor
 					highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
@@ -161,7 +169,6 @@ local function refreshESP()
 					highlight.DepthMode = Enum.HighlightDepthMode.AlwaysOnTop
 					highlight.Parent = child
 					
-					-- Teks nama
 					local billboard = Instance.new("BillboardGui")
 					billboard.Adornee = attachPart
 					billboard.Size = UDim2.new(0, 100, 0, 25)
@@ -181,7 +188,6 @@ local function refreshESP()
 					
 					billboard.Parent = screenGui
 					
-					-- Simpan referensi ke dalam tabel
 					activeESPs[child] = {Highlight = highlight, Billboard = billboard}
 				end
 			end
@@ -189,7 +195,6 @@ local function refreshESP()
 	end
 end
 
--- Loop otomatis ESP setiap 0.5 detik
 task.spawn(function()
 	while true do
 		refreshESP()
@@ -197,7 +202,7 @@ task.spawn(function()
 	end
 end)
 
--- 5. Pembuatan & Fungsi Tombol UI
+-- 6. Pembuatan & Fungsi Tombol UI
 local function createButton(text, parent)
 	local btn = Instance.new("TextButton")
 	btn.Size = UDim2.new(1, 0, 0, 45)
@@ -232,6 +237,10 @@ btnSpeedPlus.Position = UDim2.new(0.52, 0, 0, 0)
 local btnTeleport1 = createButton("Teleport: Plot", contentFrame)
 local btnTeleport2 = createButton("Teleport: Volcano", contentFrame)
 local btnESP = createButton("Toggle ESP (OFF)", contentFrame)
+local btnAntiAFK = createButton("Anti-AFK (ON)", contentFrame)
+
+-- Pengaturan tampilan tombol Anti-AFK saat dimuat (Default Green / ON)
+btnAntiAFK.TextColor3 = Color3.fromRGB(100, 255, 100)
 
 -- Event Tombol Fungsi
 btnSpeedMinus.MouseButton1Click:Connect(function() adjustSpeed(-1) end)
@@ -259,16 +268,22 @@ btnESP.MouseButton1Click:Connect(function()
 	espEnabled = not espEnabled
 	btnESP.Text = espEnabled and "Toggle ESP (ON)" or "Toggle ESP (OFF)"
 	btnESP.TextColor3 = espEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 255, 255)
-	refreshESP() -- Paksa refresh instan saat tombol ditekan
+	refreshESP()
 end)
 
--- 6. Interaktivitas UI (Minimize, Drag, Resize)
+btnAntiAFK.MouseButton1Click:Connect(function()
+	antiAfkEnabled = not antiAfkEnabled
+	btnAntiAFK.Text = antiAfkEnabled and "Anti-AFK (ON)" or "Anti-AFK (OFF)"
+	btnAntiAFK.TextColor3 = antiAfkEnabled and Color3.fromRGB(100, 255, 100) or Color3.fromRGB(255, 255, 255)
+end)
+
+-- 7. Interaktivitas UI (Minimize, Drag, Resize)
 local minimized = false
 minimizeBtn.MouseButton1Click:Connect(function()
 	minimized = not minimized
 	minimizeBtn.Text = minimized and "+" or "-"
 	TweenService:Create(mainFrame, TweenInfo.new(0.3, Enum.EasingStyle.Quint), {
-		Size = minimized and UDim2.new(0, mainFrame.Size.X.Offset, 0, 40) or UDim2.new(0, mainFrame.Size.X.Offset, 0, 350)
+		Size = minimized and UDim2.new(0, mainFrame.Size.X.Offset, 0, 40) or UDim2.new(0, mainFrame.Size.X.Offset, 0, 400)
 	}):Play()
 end)
 
