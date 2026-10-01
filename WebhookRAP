@@ -1,0 +1,45 @@
+local HttpService = game:GetService("HttpService")
+
+-- Ganti dengan URL Webhook Anda (Gunakan Proxy HTTP seperti hooks.hyra.io)
+local WEBHOOK_URL = "https://hooks.hyra.io/api/webhooks/ID_WEBHOOK_ANDA/TOKEN_WEBHOOK_ANDA"
+
+-- Mengambil folder RenderedEggs dari Workspace sesuai dengan image_bd95a0.png
+local renderedEggsFolder = workspace:WaitForChild("RenderedEggs")
+
+-- Daftar nama model telur yang ingin diberikan notifikasi
+local targetEggs = {
+	["Volcanic Egg"] = true,
+	["Cherub Egg"] = true,
+	["Solaris Egg"] = true,
+	["Blackhole Egg"] = true
+}
+
+-- Fungsi untuk mengirim pesan ke Discord
+local function sendDiscordNotification(eggName)
+	local message = eggName .. " Telah Spawn atau Restock di Server, Segera Login!!"
+	
+	local payload = {
+		["content"] = message
+	}
+	
+	-- Gunakan pcall untuk mencegah error memberhentikan script secara keseluruhan
+	local success, errorMessage = pcall(function()
+		local jsonData = HttpService:JSONEncode(payload)
+		HttpService:PostAsync(WEBHOOK_URL, jsonData)
+	end)
+	
+	if not success then
+		warn("Gagal mengirim notifikasi Webhook Discord: " .. errorMessage)
+	end
+end
+
+-- Event listener yang mendeteksi setiap kali ada object baru masuk ke RenderedEggs
+renderedEggsFolder.ChildAdded:Connect(function(child)
+	-- Pastikan jeda sebentar agar nama model ter-load sepenuhnya (opsional jika spawn instan)
+	task.wait(0.1) 
+	
+	-- Mengecek apakah nama object (telur) yang spawn ada di dalam daftar targetEggs
+	if targetEggs[child.Name] then
+		sendDiscordNotification(child.Name)
+	end
+end)
