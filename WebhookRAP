@@ -52,11 +52,6 @@ local function sendDiscordNotification(eggName)
 						inline = true
 					},
 					{
-						name = "📍 Folder Location",
-						value = "`Workspace.RenderedEggs`",
-						inline = true
-					},
-					{
 						name = "⚡ Status",
 						value = "🟢 **LIVE / SPAWNED**",
 						inline = true
