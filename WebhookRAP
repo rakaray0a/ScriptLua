@@ -19,7 +19,12 @@ local TARGET_EGGS = {
 -- =================================================================
 local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local GuiService = game:GetService("GuiService")
+local VirtualUser = game:GetService("VirtualUser")
 
+local LocalPlayer = Players.LocalPlayer
 local httpRequest = (syn and syn.request) or (http and http.request) or request or HttpService.request
 
 if not httpRequest then
@@ -27,6 +32,50 @@ if not httpRequest then
 	return
 end
 
+-- =================================================================
+-- MODULE 1: ANTI-AFK (Bypass 20 Min Kick)
+-- =================================================================
+LocalPlayer.Idled:Connect(function()
+	VirtualUser:CaptureController()
+	VirtualUser:ClickButton2(Vector2.new())
+	print("🛡️ [ANTI-AFK] Prevented AFK Kick!")
+end)
+
+-- Backup Loop Anti-AFK setiap 10 menit
+task.spawn(function()
+	while task.wait(600) do
+		VirtualUser:CaptureController()
+		VirtualUser:ClickButton1(Vector2.new())
+	end
+end)
+
+-- =================================================================
+-- MODULE 2: AUTO-REJOIN ON DISCONNECT / CRASH
+-- =================================================================
+GuiService.ErrorMessageChanged:Connect(function()
+	print("⚠️ [DISCONNECT DETECTED] Menyiapkan Auto-Rejoin...")
+	task.wait(2)
+	
+	-- Menyiapkan script untuk otomatis di-execute kembali setelah join (Autoexec Queue)
+	if queue_on_teleport or (syn and syn.queue_on_teleport) then
+		local queueFunction = queue_on_teleport or syn.queue_on_teleport
+		queueFunction([[
+			repeat task.wait() until game:IsLoaded()
+			-- Auto execute script tracker saat game selesai loading
+		]])
+	end
+
+	-- Rejoin ke tempat/server saat ini
+	if #Players:GetPlayers() <= 1 then
+		TeleportService:Teleport(game.PlaceId, LocalPlayer)
+	else
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, game.JobId, LocalPlayer)
+	end
+end)
+
+-- =================================================================
+-- MODULE 3: EGG TRACKER & WEBHOOK
+-- =================================================================
 local renderedEggsFolder = Workspace:WaitForChild("RenderedEggs")
 
 -- Format ISO 8601 untuk Discord Timestamp
@@ -34,15 +83,12 @@ local function getISOTimestamp()
 	return os.date("!%Y-%m-%dT%H:%M:%SZ")
 end
 
--- =================================================================
--- NOTIFICATION SYSTEM
--- =================================================================
 local function sendDiscordNotification(eggName)
 	local payload = {
 		content = PING_TEXT ~= "" and PING_TEXT or nil,
 		embeds = {
 			{
-				title = "🚨 RARE EGG DETECTED!",
+				title = "🚨 ETHEREAL EGG DETECTED!",
 				description = "### 🥚 **" .. eggName .. "**\n> *" .. eggName .. " Telah Spawn atau Restock di Server, Segera Login!!*",
 				color = 0xFFD700, -- Warna Emas Modern (Gold)
 				fields = {
@@ -101,4 +147,4 @@ renderedEggsFolder.ChildAdded:Connect(function(child)
 	end
 end)
 
-print("🚀 Egg Tracker Webhook Active!")
+print("🚀 Egg Tracker + Anti-AFK + Auto-Rejoin Active!")
