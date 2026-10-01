@@ -1,44 +1,33 @@
 local HttpService = game:GetService("HttpService")
 
--- Masukkan Token dari BotFather dan ID dari userinfobot di dalam tanda kutip
+-- ⚠️ GANTI DENGAN TOKEN DAN CHAT ID ANDA
 local BOT_TOKEN = "8842886436:AAE84hqNm1ZR-KA0QhGWrqV-j3XFFnJb36Y"
 local CHAT_ID = "7267868973"
 
--- Endpoint URL resmi dari Telegram (Bisa diakses langsung dari Roblox)
 local TELEGRAM_URL = "https://api.telegram.org/bot" .. BOT_TOKEN .. "/sendMessage"
 
-local renderedEggsFolder = workspace:WaitForChild("RenderedEggs")
+local function sendTestMessage(messageText)
+	print("🔄 Sedang mencoba menghubungi Telegram...")
 
-local targetEggs = {
-	["Volcanic Egg"] = true,
-	["Cherub Egg"] = true,
-	["Solaris Egg"] = true,
-	["Blackhole Egg"] = true
-}
-
-local function sendTelegramNotification(eggName)
-	local messageText = eggName .. " Telah Spawn atau Restock di Server, Segera Login!!"
-	
 	local payload = {
 		chat_id = CHAT_ID,
 		text = messageText
 	}
-	
-	local success, errorMessage = pcall(function()
+
+	local success, responseBody = pcall(function()
 		local jsonData = HttpService:JSONEncode(payload)
-		-- Mengirim POST request langsung ke server Telegram
-		HttpService:PostAsync(TELEGRAM_URL, jsonData, Enum.HttpContentType.ApplicationJson)
+		return HttpService:PostAsync(TELEGRAM_URL, jsonData, Enum.HttpContentType.ApplicationJson)
 	end)
-	
-	if not success then
-		warn("Gagal mengirim notifikasi Telegram: " .. errorMessage)
+
+	if success then
+		print("✅ SUKSES! Pesan tes berhasil terkirim ke Telegram.")
+		print("Diterima dari Telegram: ", responseBody)
+	else
+		warn("❌ GAGAL MENGIRIM PESAN! Detail Error:")
+		warn(responseBody)
 	end
 end
 
-renderedEggsFolder.ChildAdded:Connect(function(child)
-	task.wait(0.1) 
-	
-	if targetEggs[child.Name] then
-		sendTelegramNotification(child.Name)
-	end
-end)
+-- Menunggu 2 detik setelah game dimainkan, lalu langsung tes kirim pesan
+task.wait(2)
+sendTestMessage("🔔 TEST MANUAL: Notifikasi Roblox ke Telegram berhasil terhubung!")
