@@ -1,33 +1,109 @@
+-- =================================================================
+-- CONFIGURATION
+-- =================================================================
+local WEBHOOK_URL = "https://discord.com/api/webhooks/1555281458413830334/ECnrIT1j7_zSZCKtJ2lASwoOjFtTpSMi96tDmNImksnhag7e53sAUO3KXAxxldUXtYm3"
+
+-- Tagging/Ping di luar embed (Bisa diisi "@everyone", "@here", atau biarkan "")
+local PING_TEXT = "@everyone"
+
+-- List telur spesifik yang ingin dipantau
+local TARGET_EGGS = {
+	["Volcanic Egg"] = true,
+	["Cherub Egg"] = true,
+	["Solaris Egg"] = true,
+	["Blackhole Egg"] = true,
+}
+
+-- =================================================================
+-- SERVICES & UTILS
+-- =================================================================
+local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 
--- ⚠️ GANTI DENGAN TOKEN DAN CHAT ID ANDA
-local BOT_TOKEN = "8842886436:AAE84hqNm1ZR-KA0QhGWrqV-j3XFFnJb36Y"
-local CHAT_ID = "7267868973"
+local httpRequest = (syn and syn.request) or (http and http.request) or request or HttpService.request
 
-local TELEGRAM_URL = "https://api.telegram.org/bot" .. BOT_TOKEN .. "/sendMessage"
+if not httpRequest then
+	warn("Executor kamu tidak mendukung HTTP Request!")
+	return
+end
 
-local function sendTestMessage(messageText)
-	print("🔄 Sedang mencoba menghubungi Telegram...")
+local renderedEggsFolder = Workspace:WaitForChild("RenderedEggs")
 
+-- Format ISO 8601 untuk Discord Timestamp
+local function getISOTimestamp()
+	return os.date("!%Y-%m-%dT%H:%M:%SZ")
+end
+
+-- =================================================================
+-- NOTIFICATION SYSTEM
+-- =================================================================
+local function sendDiscordNotification(eggName)
 	local payload = {
-		chat_id = CHAT_ID,
-		text = messageText
+		content = PING_TEXT ~= "" and PING_TEXT or nil,
+		embeds = {
+			{
+				title = "🚨 RARE EGG DETECTED!",
+				description = "### 🥚 **" .. eggName .. "**\n> *" .. eggName .. " Telah Spawn atau Restock di Server, Segera Login!!*",
+				color = 0xFFD700, -- Warna Emas Modern (Gold)
+				fields = {
+					{
+						name = "📦 Model Name",
+						value = "`" .. eggName .. "`",
+						inline = true
+					},
+					{
+						name = "📍 Folder Location",
+						value = "`Workspace.RenderedEggs`",
+						inline = true
+					},
+					{
+						name = "⚡ Status",
+						value = "🟢 **LIVE / SPAWNED**",
+						inline = true
+					}
+				},
+				footer = {
+					text = "Egg Restock Notifier System",
+					icon_url = "https://cdn-icons-png.flaticon.com/512/1043/1043424.png"
+				},
+				timestamp = getISOTimestamp()
+			}
+		}
 	}
 
-	local success, responseBody = pcall(function()
-		local jsonData = HttpService:JSONEncode(payload)
-		return HttpService:PostAsync(TELEGRAM_URL, jsonData, Enum.HttpContentType.ApplicationJson)
-	end)
+	-- Kirim HTTP Post request dari Executor
+	local response = httpRequest({
+		Url = WEBHOOK_URL,
+		Method = "POST",
+		Headers = {
+			["Content-Type"] = "application/json"
+		},
+		Body = HttpService:JSONEncode(payload)
+	})
 
-	if success then
-		print("✅ SUKSES! Pesan tes berhasil terkirim ke Telegram.")
-		print("Diterima dari Telegram: ", responseBody)
+	if response and (response.StatusCode == 200 or response.StatusCode == 204) then
+		print("✨ [DISCORD EMBED SUCCESS] Notifikasi " .. eggName .. " berhasil dikirim!")
 	else
-		warn("❌ GAGAL MENGIRIM PESAN! Detail Error:")
-		warn(responseBody)
+		warn("❌ [DISCORD EMBED ERROR] Status Code: " .. tostring(response and response.StatusCode))
 	end
 end
 
--- Menunggu 2 detik setelah game dimainkan, lalu langsung tes kirim pesan
-task.wait(2)
-sendTestMessage("🔔 TEST MANUAL: Notifikasi Roblox ke Telegram berhasil terhubung!")
+-- =================================================================
+-- EVENT LISTENERS
+-- =================================================================
+
+-- 1. Deteksi telur yang SUDAH ADA saat script pertama kali di-execute
+for _, child in ipairs(renderedEggsFolder:GetChildren()) do
+	if TARGET_EGGS[child.Name] then
+		task.spawn(sendDiscordNotification, child.Name)
+	end
+end
+
+-- 2. Deteksi telur BARU yang masuk/spawn ke folder RenderedEggs
+renderedEggsFolder.ChildAdded:Connect(function(child)
+	if TARGET_EGGS[child.Name] then
+		sendDiscordNotification(child.Name)
+	end
+end)
+
+print("🚀 Egg Tracker Webhook Active!")
