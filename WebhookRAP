@@ -1,7 +1,7 @@
 local HttpService = game:GetService("HttpService")
 
 -- Masukkan Token dari BotFather dan ID dari userinfobot di dalam tanda kutip
-local BOT_TOKEN = "AAE84hqNm1ZR-KA0QhGWrqV-j3XFFnJb36Y"
+local BOT_TOKEN = "8842886436:AAE84hqNm1ZR-KA0QhGWrqV-j3XFFnJb36Y"
 local CHAT_ID = "7267868973"
 
 -- Endpoint URL resmi dari Telegram (Bisa diakses langsung dari Roblox)
