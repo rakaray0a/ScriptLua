@@ -1,7 +1,7 @@
 local HttpService = game:GetService("HttpService")
 
 -- Ganti dengan URL Webhook Anda (Gunakan Proxy HTTP seperti hooks.hyra.io)
-local WEBHOOK_URL = "https://hooks.hyra.io/api/webhooks/1555248767777644560/7-XkvwjZiKTT6xEBnIq_WBQEtZESNmb6JVyCtRTafcZD7o4U8fQK1M3yV--q8SJ6p-Ua"
+local WEBHOOK_URL = "https://webhook.lewisakura.moe/api/webhooks/1555248767777644560/7-XkvwjZiKTT6xEBnIq_WBQEtZESNmb6JVyCtRTafcZD7o4U8fQK1M3yV--q8SJ6p-Ua"
 
 -- Mengambil folder RenderedEggs dari Workspace sesuai dengan image_bd95a0.png
 local renderedEggsFolder = workspace:WaitForChild("RenderedEggs")
