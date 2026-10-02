@@ -5,10 +5,10 @@
 local DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1555281458413830334/ECnrIT1j7_zSZCKtJ2lASwoOjFtTpSMi96tDmNImksnhag7e53sAUO3KXAxxldUXtYm3"
 local PING_TEXT = "@everyone"
 
--- 2. WhatsApp Config (Contoh menggunakan Fonnte API)
+-- 2. WhatsApp Config (Fonnte API)
 local WA_ENABLE = true -- Set to false jika ingin mematikan notif WA sementara
-local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" -- Dapatkan token gratis dari fonnte.com
-local WA_TARGET_NUMBER = "120363431443363419" -- Nomor tujuan / ID Grup WA (Gunakan format 08xx / 628xx)
+local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" 
+local WA_TARGET_NUMBER = "120363431443363419@g.us" -- ID Grup WhatsApp
 
 -- 3. Target Eggs
 local TARGET_EGGS = {
@@ -112,17 +112,25 @@ local function sendDiscordNotification(eggName)
 		}
 	}
 
-	httpRequest({
-		Url = DISCORD_WEBHOOK_URL,
-		Method = "POST",
-		Headers = { ["Content-Type"] = "application/json" },
-		Body = HttpService:JSONEncode(payload)
-	})
+	local success, response = pcall(function()
+		return httpRequest({
+			Url = DISCORD_WEBHOOK_URL,
+			Method = "POST",
+			Headers = { ["Content-Type"] = "application/json" },
+			Body = HttpService:JSONEncode(payload)
+		})
+	end)
+
+	if success then
+		print("✨ [DISCORD] Notifikasi terkirim untuk: " .. eggName)
+	else
+		warn("❌ [DISCORD ERROR] Gagal mengirim webhook!")
+	end
 end
 
 -- Function Kirim ke WhatsApp
 local function sendWANotification(eggName)
-	if not WA_ENABLE or FONNTE_TOKEN == "a4X6vVkeqFNPrm3CMiUs" then return end
+	if not WA_ENABLE or FONNTE_TOKEN == "" then return end
 
 	local waMessage = "🚨 *ETHEREAL EGG RESTOCK / SPAWN ALERT!*\n\n" ..
 		"🥚 *Egg Name:* " .. eggName .. "\n" ..
@@ -131,18 +139,27 @@ local function sendWANotification(eggName)
 
 	local payload = {
 		target = WA_TARGET_NUMBER,
-		message = waMessage
+		message = waMessage,
+		countryCode = "62" -- Wajib ada untuk memvalidasi nomor/grup Indonesia
 	}
 
-	httpRequest({
-		Url = "https://api.fonnte.com/send",
-		Method = "POST",
-		Headers = {
-			["Authorization"] = FONNTE_TOKEN,
-			["Content-Type"] = "application/json"
-		},
-		Body = HttpService:JSONEncode(payload)
-	})
+	local success, response = pcall(function()
+		return httpRequest({
+			Url = "https://api.fonnte.com/send",
+			Method = "POST",
+			Headers = {
+				["Authorization"] = FONNTE_TOKEN,
+				["Content-Type"] = "application/json"
+			},
+			Body = HttpService:JSONEncode(payload)
+		})
+	end)
+
+	if success and response then
+		print("📱 [WHATSAPP] Respon API Fonnte: " .. tostring(response.Body))
+	else
+		warn("❌ [WHATSAPP ERROR] Gagal mengirim HTTP request ke Fonnte!")
+	end
 end
 
 -- Main Trigger Notification
@@ -170,4 +187,4 @@ renderedEggsFolder.ChildAdded:Connect(function(child)
 	end
 end)
 
-print("🚀 Egg Tracker Active (Discord + WhatsApp Integration)!")
+print("🚀 Egg Tracker Active (Discord + WhatsApp Group Fix Integrated)!")
