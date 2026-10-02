@@ -1,12 +1,16 @@
 -- =================================================================
 -- CONFIGURATION
 -- =================================================================
-local WEBHOOK_URL = "https://discord.com/api/webhooks/1555281458413830334/ECnrIT1j7_zSZCKtJ2lASwoOjFtTpSMi96tDmNImksnhag7e53sAUO3KXAxxldUXtYm3"
-
--- Tagging/Ping di luar embed (Bisa diisi "@everyone", "@here", atau biarkan "")
+-- 1. Discord Config
+local DISCORD_WEBHOOK_URL = "https://discord.com/api/webhooks/1555281458413830334/ECnrIT1j7_zSZCKtJ2lASwoOjFtTpSMi96tDmNImksnhag7e53sAUO3KXAxxldUXtYm3"
 local PING_TEXT = "@everyone"
 
--- List telur spesifik yang ingin dipantau
+-- 2. WhatsApp Config (Contoh menggunakan Fonnte API)
+local WA_ENABLE = true -- Set to false jika ingin mematikan notif WA sementara
+local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" -- Dapatkan token gratis dari fonnte.com
+local WA_TARGET_NUMBER = "081219938959" -- Nomor tujuan / ID Grup WA (Gunakan format 08xx / 628xx)
+
+-- 3. Target Eggs
 local TARGET_EGGS = {
 	["Volcanic Egg"] = true,
 	["Cherub Egg"] = true,
@@ -33,7 +37,7 @@ if not httpRequest then
 end
 
 -- =================================================================
--- MODULE 1: ANTI-AFK (Bypass 20 Min Kick)
+-- MODULE 1: ANTI-AFK
 -- =================================================================
 LocalPlayer.Idled:Connect(function()
 	VirtualUser:CaptureController()
@@ -41,7 +45,6 @@ LocalPlayer.Idled:Connect(function()
 	print("🛡️ [ANTI-AFK] Prevented AFK Kick!")
 end)
 
--- Backup Loop Anti-AFK setiap 10 menit
 task.spawn(function()
 	while task.wait(600) do
 		VirtualUser:CaptureController()
@@ -56,16 +59,13 @@ GuiService.ErrorMessageChanged:Connect(function()
 	print("⚠️ [DISCONNECT DETECTED] Menyiapkan Auto-Rejoin...")
 	task.wait(2)
 	
-	-- Menyiapkan script untuk otomatis di-execute kembali setelah join (Autoexec Queue)
 	if queue_on_teleport or (syn and syn.queue_on_teleport) then
 		local queueFunction = queue_on_teleport or syn.queue_on_teleport
 		queueFunction([[
 			repeat task.wait() until game:IsLoaded()
-			-- Auto execute script tracker saat game selesai loading
 		]])
 	end
 
-	-- Rejoin ke tempat/server saat ini
 	if #Players:GetPlayers() <= 1 then
 		TeleportService:Teleport(game.PlaceId, LocalPlayer)
 	else
@@ -74,15 +74,15 @@ GuiService.ErrorMessageChanged:Connect(function()
 end)
 
 -- =================================================================
--- MODULE 3: EGG TRACKER & WEBHOOK
+-- MODULE 3: NOTIFICATION DISCORD & WHATSAPP
 -- =================================================================
 local renderedEggsFolder = Workspace:WaitForChild("RenderedEggs")
 
--- Format ISO 8601 untuk Discord Timestamp
 local function getISOTimestamp()
 	return os.date("!%Y-%m-%dT%H:%M:%SZ")
 end
 
+-- Function Kirim ke Discord
 local function sendDiscordNotification(eggName)
 	local payload = {
 		content = PING_TEXT ~= "" and PING_TEXT or nil,
@@ -90,7 +90,7 @@ local function sendDiscordNotification(eggName)
 			{
 				title = "🚨 ETHEREAL EGG DETECTED!",
 				description = "### 🥚 **" .. eggName .. "**\n> *" .. eggName .. " Telah Spawn atau Restock di Server, Segera Login!!*",
-				color = 0xFFD700, -- Warna Emas Modern (Gold)
+				color = 0xFFD700,
 				fields = {
 					{
 						name = "📦 Model Name",
@@ -112,21 +112,44 @@ local function sendDiscordNotification(eggName)
 		}
 	}
 
-	-- Kirim HTTP Post request dari Executor
-	local response = httpRequest({
-		Url = WEBHOOK_URL,
+	httpRequest({
+		Url = DISCORD_WEBHOOK_URL,
+		Method = "POST",
+		Headers = { ["Content-Type"] = "application/json" },
+		Body = HttpService:JSONEncode(payload)
+	})
+end
+
+-- Function Kirim ke WhatsApp
+local function sendWANotification(eggName)
+	if not WA_ENABLE or FONNTE_TOKEN == "a4X6vVkeqFNPrm3CMiUs" then return end
+
+	local waMessage = "🚨 *ETHEREAL EGG RESTOCK / SPAWN ALERT!*\n\n" ..
+		"🥚 *Egg Name:* " .. eggName .. "\n" ..
+		"📍 *Status:* Spawned di Server!\n\n" ..
+		"⚡ _" .. eggName .. " Telah Spawn atau Restock di Server, Segera Login!!_"
+
+	local payload = {
+		target = WA_TARGET_NUMBER,
+		message = waMessage
+	}
+
+	httpRequest({
+		Url = "https://api.fonnte.com/send",
 		Method = "POST",
 		Headers = {
+			["Authorization"] = FONNTE_TOKEN,
 			["Content-Type"] = "application/json"
 		},
 		Body = HttpService:JSONEncode(payload)
 	})
+end
 
-	if response and (response.StatusCode == 200 or response.StatusCode == 204) then
-		print("✨ [DISCORD EMBED SUCCESS] Notifikasi " .. eggName .. " berhasil dikirim!")
-	else
-		warn("❌ [DISCORD EMBED ERROR] Status Code: " .. tostring(response and response.StatusCode))
-	end
+-- Main Trigger Notification
+local function triggerAlert(eggName)
+	task.spawn(sendDiscordNotification, eggName)
+	task.spawn(sendWANotification, eggName)
+	print("📢 [ALERT SENT] Discord & WhatsApp notification dispatched for: " .. eggName)
 end
 
 -- =================================================================
@@ -136,15 +159,15 @@ end
 -- 1. Deteksi telur yang SUDAH ADA saat script pertama kali di-execute
 for _, child in ipairs(renderedEggsFolder:GetChildren()) do
 	if TARGET_EGGS[child.Name] then
-		task.spawn(sendDiscordNotification, child.Name)
+		triggerAlert(child.Name)
 	end
 end
 
 -- 2. Deteksi telur BARU yang masuk/spawn ke folder RenderedEggs
 renderedEggsFolder.ChildAdded:Connect(function(child)
 	if TARGET_EGGS[child.Name] then
-		sendDiscordNotification(child.Name)
+		triggerAlert(child.Name)
 	end
 end)
 
-print("🚀 Egg Tracker + Anti-AFK + Auto-Rejoin Active!")
+print("🚀 Egg Tracker Active (Discord + WhatsApp Integration)!")
