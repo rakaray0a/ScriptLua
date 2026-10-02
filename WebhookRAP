@@ -8,7 +8,7 @@ local PING_TEXT = "@everyone"
 -- 2. WhatsApp Config (Contoh menggunakan Fonnte API)
 local WA_ENABLE = true -- Set to false jika ingin mematikan notif WA sementara
 local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" -- Dapatkan token gratis dari fonnte.com
-local WA_TARGET_NUMBER = "081219938959" -- Nomor tujuan / ID Grup WA (Gunakan format 08xx / 628xx)
+local WA_TARGET_NUMBER = "120363431443363419" -- Nomor tujuan / ID Grup WA (Gunakan format 08xx / 628xx)
 
 -- 3. Target Eggs
 local TARGET_EGGS = {
