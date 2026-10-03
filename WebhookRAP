@@ -7,8 +7,8 @@ local PING_TEXT = "@everyone"
 
 -- 2. WhatsApp Config (Fonnte API)
 local WA_ENABLE = true -- Set to false jika ingin mematikan notif WA sementara
--- local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" 
-local FONNTE_TOKEN = "lAzQZ7XrHJzKBI6CfAFUVaSbuVlKrOrssLghA0fv05c9f5f2"
+local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" 
+-- local FONNTE_TOKEN = "lAzQZ7XrHJzKBI6CfAFUVaSbuVlKrOrssLghA0fv05c9f5f2"
 local WA_TARGET_NUMBER = "120363431443363419@g.us" -- ID Grup WhatsApp
 
 -- 3. Target Eggs
