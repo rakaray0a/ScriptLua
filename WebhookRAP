@@ -15,7 +15,6 @@ local TARGET_EGGS = {
 	["Volcanic Egg"] = true,
 	["Cherub Egg"] = true,
 	["Solaris Egg"] = true,
-	["Blackhole Egg"] = true,
 }
 
 -- =================================================================
