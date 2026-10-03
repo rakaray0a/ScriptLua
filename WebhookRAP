@@ -7,7 +7,8 @@ local PING_TEXT = "@everyone"
 
 -- 2. WhatsApp Config (Fonnte API)
 local WA_ENABLE = true -- Set to false jika ingin mematikan notif WA sementara
-local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" 
+-- local FONNTE_TOKEN = "a4X6vVkeqFNPrm3CMiUs" 
+local FONNTE_TOKEN = "lAzQZ7XrHJzKBI6CfAFUVaSbuVlKrOrssLghA0fv05c9f5f2"
 local WA_TARGET_NUMBER = "120363431443363419@g.us" -- ID Grup WhatsApp
 
 -- 3. Target Eggs
@@ -84,11 +85,8 @@ end
 
 -- Function Kirim ke Discord
 local function sendDiscordNotification(eggName)
-	-- Menambahkan Nama Model Egg tepat di sebelum @everyone
-	local discordContent = eggName .. " " .. PING_TEXT
-
 	local payload = {
-		content = discordContent,
+		content = PING_TEXT ~= "" and PING_TEXT or nil,
 		embeds = {
 			{
 				title = "🚨 ETHEREAL EGG DETECTED!",
@@ -143,7 +141,7 @@ local function sendWANotification(eggName)
 	local payload = {
 		target = WA_TARGET_NUMBER,
 		message = waMessage,
-		countryCode = "62"
+		countryCode = "62" -- Wajib ada untuk memvalidasi nomor/grup Indonesia
 	}
 
 	local success, response = pcall(function()
@@ -190,4 +188,4 @@ renderedEggsFolder.ChildAdded:Connect(function(child)
 	end
 end)
 
-print("🚀 Egg Tracker Active!")
+print("🚀 Egg Tracker Active (Discord + WhatsApp Group Fix Integrated)!")
