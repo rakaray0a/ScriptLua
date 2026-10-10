@@ -3,6 +3,7 @@
 -- ==========================================
 local HOLD_TIME = 1.3     -- Durasi menahan tombol kustom
 local COLLECT_DELAY = 0.5 -- Jeda setelah collect
+local DROP_DELAY = 1.0    -- Jeda waktu ketika berada di lokasi drop candy (bisa diubah sesuai kebutuhan)
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
@@ -107,7 +108,7 @@ closeButton.Text = "X"
 closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
 closeButton.TextSize = 14
 closeButton.Font = Enum.Font.GothamBold
-closeButton.Parent = mainFrame
+closeButton.Parent = titleBar
 
 -- Toggle Status
 local toggleButton = Instance.new("TextButton")
@@ -268,7 +269,7 @@ local function getSortedCandyListByDistance(folder)
 end
 
 -- ==========================================
--- MAIN LOOP (Teleport Version)
+-- MAIN LOOP (Teleport Version + Drop Delay)
 -- ==========================================
 task.spawn(function()
 	while getgenv().CandyMobileFarmRunning do
@@ -317,7 +318,9 @@ task.spawn(function()
 						-- 3. Teleport instan ke DropOff Pad
 						local dropPos = dropOffPad.Position
 						teleportTo(CFrame.new(dropPos + Vector3.new(0, 3, 0)))
-						task.wait(0.1)
+						
+						-- 4. Jeda waktu (delay) saat berada di lokasi drop candy sebelum lanjut ke candy berikutnya
+						task.wait(DROP_DELAY)
 					end
 				end
 			end
