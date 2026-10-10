@@ -1,8 +1,9 @@
 -- ==========================================
 -- PENGATURAN PARAMETER
 -- ==========================================
-local TWEEN_SPEED = 350   -- Kecepatan tween
-local COLLECT_DELAY = 3.0 -- Jeda waktu setelah collect
+local TWEEN_SPEED = 350   -- Kecepatan movement
+local HOLD_TIME = 2.0     -- Durasi menahan tombol kustom (diperlamat menjadi 2 detik)
+local COLLECT_DELAY = 1.0 -- Jeda setelah collect
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
@@ -220,7 +221,7 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- FUNGSI AUTO KLIK TOMBOL PICK UP DI MOBILE
+-- FUNGSI AUTO KLIK TOMBOL PICK UP DI MOBILE (DENGAN HOLD LAMBAT)
 -- ==========================================
 local function triggerMobilePickUpButton()
 	pcall(function()
@@ -239,12 +240,12 @@ local function triggerMobilePickUpButton()
 			end
 		end
 		
-		-- 2. Simulasi sentuhan virtual persis di tengah layar (tempat ikon tangan/jari "Pick Up" muncul)[cite: 2]
+		-- 2. Simulasi sentuhan virtual persis di tengah layar dengan waktu tahan (Hold) yang diperlambat
 		local viewportSize = Workspace.CurrentCamera.ViewportSize
 		local screenCenter = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
 		
 		VirtualInputManager:SendTouchEvent(1, 0, screenCenter.X, screenCenter.Y)
-		task.wait(0.5)
+		task.wait(HOLD_TIME) -- Menahan sentuhan selama durasi HOLD_TIME (2 detik)
 		VirtualInputManager:SendTouchEvent(1, 1, screenCenter.X, screenCenter.Y)
 		VirtualInputManager:SendTouchEvent(1, 2, screenCenter.X, screenCenter.Y)
 	end)
@@ -294,7 +295,7 @@ task.spawn(function()
 						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
 						task.wait(0.1)
 						
-						-- 2. Picu tombol "Pick Up" kustom di layar HP
+						-- 2. Picu tombol "Pick Up" kustom di layar HP dengan durasi hold lebih lambat
 						triggerMobilePickUpButton()
 						
 						-- TouchInterest cadangan
@@ -314,7 +315,7 @@ task.spawn(function()
 				end
 			end
 			
-			task.wait(1)
+			task.wait(0.5)
 		end
 	end
 end)
