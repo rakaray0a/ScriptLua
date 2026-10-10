@@ -3,7 +3,7 @@
 -- ==========================================
 local HOLD_TIME = 1.3       -- Durasi menahan tombol kustom
 local COLLECT_DELAY = 0.5   -- Jeda setelah collect
-local DROP_DELAY = 1.2      -- Jeda waktu ketika berada di lokasi drop candy
+local DROP_DELAY = 2.0      -- Jeda waktu ketika berada di lokasi drop candy
 local TELEPORT_DELAY = 2.0  -- Jeda waktu setelah melakukan teleport agar posisi stabil
 
 -- ==========================================
