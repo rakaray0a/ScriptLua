@@ -14,13 +14,13 @@ end
 getgenv().CandyUIAutoFarmRunning = true
 
 -- ==========================================
--- KODE UTAMA & UI (Support Mobile / Delta)
+-- KODE UTAMA & UI
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local Camera = Workspace.CurrentCamera
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -45,7 +45,7 @@ local function tweenTo(targetCFrame, speed)
 	task.wait(duration)
 end
 
--- Hapus UI lama jika ada agar tidak numpuk
+-- Hapus UI lama jika ada
 if playerGui:FindFirstChild("CandyAutoFarmUI") then
 	playerGui["CandyAutoFarmUI"]:Destroy()
 end
@@ -62,7 +62,7 @@ screenGui.DisplayOrder = 99999
 -- Main Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 240, 0, 160)
+mainFrame.Size = UDim2.new(0, 240, 0, 150)
 mainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BackgroundTransparency = 0.3
@@ -84,9 +84,9 @@ local titleBar = Instance.new("TextLabel")
 titleBar.Size = UDim2.new(1, 0, 0, 35)
 titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 titleBar.BackgroundTransparency = 0.5
-titleBar.Text = "  🎃 Auto Candy Farm (Mobile)"
+titleBar.Text = "  🎃 Auto Candy (Camera Focus)"
 titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleBar.TextSize = 13
+titleBar.TextSize = 12
 titleBar.Font = Enum.Font.GothamBold
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
@@ -119,8 +119,8 @@ closeButton.Parent = titleBar
 
 -- Toggle Button On/Off
 local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0.85, 0, 0, 40)
-toggleButton.Position = UDim2.new(0.075, 0, 0, 45)
+toggleButton.Size = UDim2.new(0.85, 0, 0, 45)
+toggleButton.Position = UDim2.new(0.075, 0, 0, 50)
 toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 toggleButton.Text = "STATUS: OFF"
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -131,21 +131,6 @@ toggleButton.Parent = mainFrame
 local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 8)
 toggleCorner.Parent = toggleButton
-
--- Tombol Manual Hold E khusus Mobile (Bisa ditekan manual jika otomatis gagal)
-local manualHoldBtn = Instance.new("TextButton")
-manualHoldBtn.Size = UDim2.new(0.85, 0, 0, 35)
-manualHoldBtn.Position = UDim2.new(0.075, 0, 0, 95)
-manualHoldBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 150)
-manualHoldBtn.Text = "TAP [HOLD E] MANUAL"
-manualHoldBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-manualHoldBtn.TextSize = 12
-manualHoldBtn.Font = Enum.Font.GothamBold
-manualHoldBtn.Parent = mainFrame
-
-local manualCorner = Instance.new("UICorner")
-manualCorner.CornerRadius = UDim.new(0, 8)
-manualCorner.Parent = manualHoldBtn
 
 -- Resize Handle
 local resizeButton = Instance.new("TextButton")
@@ -192,12 +177,11 @@ local isMinimized = false
 minButton.MouseButton1Click:Connect(function()
 	isMinimized = not isMinimized
 	toggleButton.Visible = not isMinimized
-	manualHoldBtn.Visible = not isMinimized
 	if isMinimized then
 		mainFrame.Size = UDim2.new(0, 240, 0, 35)
 		minButton.Text = "+"
 	else
-		mainFrame.Size = UDim2.new(0, 240, 0, 160)
+		mainFrame.Size = UDim2.new(0, 240, 0, 150)
 		minButton.Text = "-"
 	end
 end)
@@ -226,7 +210,7 @@ UserInputService.InputChanged:Connect(function(input)
 	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local mousePos = input.Position
 		local newWidth = math.clamp(mousePos.X - mainFrame.AbsolutePosition.X, 200, 400)
-		local newHeight = math.clamp(mousePos.Y - mainFrame.AbsolutePosition.Y, 120, 300)
+		local newHeight = math.clamp(mousePos.Y - mainFrame.AbsolutePosition.Y, 110, 300)
 		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
 	end
 end)
@@ -243,22 +227,8 @@ toggleButton.MouseButton1Click:Connect(function()
 	end
 end)
 
--- Fungsi Simulasi Tahan Tombol E secara Virtual untuk Mobile
-local function simulateHoldE()
-	pcall(function()
-		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-		task.wait(1.0) -- Tahan selama 1 detik
-		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-	end)
-end
-
--- Tombol manual jika ingin ditekan langsung di layar HP saat di depan candy
-manualHoldBtn.MouseButton1Click:Connect(function()
-	simulateHoldE()
-end)
-
 -- ==========================================
--- MAIN LOOP AUTO FARM (Urutan Besar ke Kecil)
+-- MAIN LOOP AUTO FARM (Urutan Besar ke Kecil + Auto Focus Kamera)
 -- ==========================================
 local function getSortedCandyList(folder)
 	local items = folder:GetChildren()
@@ -307,7 +277,13 @@ task.spawn(function()
 						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
 						task.wait(0.05)
 						
-						-- 2. Picu Proximity Prompt & Simulasi Virtual Key E secara otomatis
+						-- 2. AUTO FOCUS KAMERA: Paksa kamera menghadap ke arah candy agar proximity muncul di layar HP
+						pcall(function()
+							Camera.CFrame = CFrame.new(Camera.CFrame.Position, candyPos)
+						end)
+						task.wait(0.05)
+						
+						-- 3. Picu Proximity Prompt secara instan
 						if prompt then
 							pcall(function()
 								prompt.HoldDuration = 0
@@ -315,9 +291,6 @@ task.spawn(function()
 								fireproximityprompt(prompt)
 							end)
 						end
-						
-						-- Simulasi tombol E virtual untuk HP/Mobile
-						simulateHoldE()
 						
 						-- Sentuhan fisik cadangan (TouchInterest)
 						pcall(function()
@@ -328,7 +301,7 @@ task.spawn(function()
 						
 						task.wait(COLLECT_DELAY)
 						
-						-- 3. Tween ke DropOff Pad
+						-- 4. Tween ke DropOff Pad
 						local dropPos = dropOffPad.Position
 						tweenTo(CFrame.new(dropPos + Vector3.new(0, 3, 0)), TWEEN_SPEED)
 						task.wait(0.1)
