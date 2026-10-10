@@ -1,0 +1,136 @@
+-- ==========================================
+-- PENGATURAN PARAMETER
+-- ==========================================
+local TWEEN_SPEED = 300   -- Kecepatan tween
+local HOLD_TIME = 1.0     -- Durasi tahan tombol E (sesuaikan jika kurang lama)
+local COLLECT_DELAY = 0.5 -- Jeda setelah collect sebelum ke drop pad
+
+-- ==========================================
+-- SISTEM ANTI-STACK (Mencegah double loop)
+-- ==========================================
+if getgenv().CandyAutoFarmRunning then
+	getgenv().CandyAutoFarmRunning = false
+	task.wait(0.3)
+end
+getgenv().CandyAutoFarmRunning = true
+
+-- ==========================================
+-- KODE UTAMA
+-- ==========================================
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local TweenService = game:GetService("TweenService")
+
+local player = Players.LocalPlayer
+local isRunning = false
+
+local function getRootPart()
+	local char = player.Character or player.CharacterAdded:Wait()
+	return char:FindFirstChild("HumanoidRootPart")
+end
+
+local function tweenTo(targetCFrame, speed)
+	local rootPart = getRootPart()
+	if not rootPart then return end
+	
+	local distance = (rootPart.Position - targetCFrame.Position).Magnitude
+	local duration = math.max(distance / speed, 0.05)
+	
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetCFrame})
+	
+	tween:Play()
+	task.wait(duration)
+end
+
+-- Toggle On/Off menggunakan tombol "P"
+local inputConnection
+inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
+	if gameProcessed then return end
+	if input.KeyCode == Enum.KeyCode.P then
+		isRunning = not isRunning
+		print("Auto Candy Tween:", isRunning and "AKTIF" or "MATI")
+	end
+end)
+
+-- Fungsi sort dari terbesar ke terkecil (Candy_04 ke Candy_01)
+local function getSortedCandyList(folder)
+	local items = folder:GetChildren()
+	table.sort(items, function(a, b)
+		return a.Name > b.Name
+	end)
+	return items
+end
+
+-- Main Loop
+task.spawn(function()
+	while getgenv().CandyAutoFarmRunning do
+		task.wait(0.2)
+		
+		if isRunning then
+			local candyFolder = Workspace:FindFirstChild("HalloweenCandy", true)
+			local dropOffPad = Workspace:FindFirstChild("Pad", true) or (Workspace:FindFirstChild("CandyDropOff", true) and Workspace:FindFirstChild("CandyDropOff", true):FindFirstChild("Pad", true))
+			
+			if not candyFolder or not dropOffPad then
+				task.wait(2)
+				continue
+			end
+			
+			local candyList = getSortedCandyList(candyFolder)
+			
+			for _, candy in ipairs(candyList) do
+				if not isRunning or not getgenv().CandyAutoFarmRunning then break end
+				
+				local targetPart = nil
+				if candy:IsA("BasePart") then
+					targetPart = candy
+				elseif candy:IsA("Model") then
+					targetPart = candy.PrimaryPart or candy:FindFirstChildWhichIsA("BasePart", true)
+				end
+				
+				if targetPart then
+					local rootPart = getRootPart()
+					if rootPart then
+						local candyPos = targetPart.Position
+						if candy:IsA("Model") and candy.WorldPivot then
+							candyPos = candy:GetPivot().Position
+						end
+						
+						-- 1. Tween tepat ke lokasi candy
+						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
+						task.wait(0.1)
+						
+						-- 2. Simulasi Tekan & Tahan Tombol E secara Hardware (Menggunakan keypress/keyrelease)
+						pcall(function()
+							if keypress and keyrelease then
+								keypress(0x45) -- 0x45 adalah kode hex untuk tombol 'E'
+								task.wait(HOLD_TIME) -- Tahan selama durasi tertentu
+								keyrelease(0x45)
+							elseif vim then
+								-- Alternatif jika executor menggunakan VirtualInputManager wrapper (vim)
+								vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+								task.wait(HOLD_TIME)
+								vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+							end
+						end)
+						
+						task.wait(COLLECT_DELAY)
+						
+						-- 3. Tween ke DropOff Pad
+						local dropPos = dropOffPad.Position
+						tweenTo(CFrame.new(dropPos + Vector3.new(0, 3, 0)), TWEEN_SPEED)
+						task.wait(0.1)
+					end
+				end
+			end
+			
+			task.wait(0.5)
+		end
+	end
+	
+	if inputConnection then
+		inputConnection:Disconnect()
+	end
+	print("Auto Candy Script dihentikan.")
+end)
