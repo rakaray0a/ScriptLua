@@ -3,7 +3,7 @@
 -- ==========================================
 local TWEEN_SPEED = 350   -- Kecepatan movement
 local HOLD_TIME = 2.5     -- Durasi menahan tombol kustom (diperlamat menjadi 2 detik)
-local COLLECT_DELAY = 1.0 -- Jeda setelah collect
+local COLLECT_DELAY = 0.5 -- Jeda setelah collect
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
