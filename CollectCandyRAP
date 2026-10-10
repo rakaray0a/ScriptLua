@@ -2,7 +2,7 @@
 -- PENGATURAN PARAMETER
 -- ==========================================
 local TWEEN_SPEED = 350   -- Kecepatan movement
-local HOLD_TIME = 1.3     -- Durasi menahan tombol kustom (diperlamat menjadi 2 detik)
+local HOLD_TIME = 1.3     -- Durasi menahan tombol kustom
 local COLLECT_DELAY = 0.5 -- Jeda setelah collect
 
 -- ==========================================
@@ -84,7 +84,7 @@ local titleBar = Instance.new("TextLabel")
 titleBar.Size = UDim2.new(1, 0, 0, 35)
 titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 titleBar.BackgroundTransparency = 0.4
-titleBar.Text = "  🎃 Mobile Custom PickUp Fix"
+titleBar.Text = "   🎃 Mobile Custom PickUp Fix"
 titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleBar.TextSize = 12
 titleBar.Font = Enum.Font.GothamBold
@@ -221,7 +221,7 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- FUNGSI AUTO KLIK TOMBOL PICK UP DI MOBILE (DENGAN HOLD LAMBAT)
+-- FUNGSI AUTO KLIK TOMBOL PICK UP DI MOBILE
 -- ==========================================
 local function triggerMobilePickUpButton()
 	pcall(function()
@@ -240,23 +240,40 @@ local function triggerMobilePickUpButton()
 			end
 		end
 		
-		-- 2. Simulasi sentuhan virtual persis di tengah layar dengan waktu tahan (Hold) yang diperlambat
+		-- 2. Simulasi sentuhan virtual persis di tengah layar dengan waktu tahan (Hold)
 		local viewportSize = Workspace.CurrentCamera.ViewportSize
 		local screenCenter = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
 		
 		VirtualInputManager:SendTouchEvent(1, 0, screenCenter.X, screenCenter.Y)
-		task.wait(HOLD_TIME) -- Menahan sentuhan selama durasi HOLD_TIME (2 detik)
+		task.wait(HOLD_TIME)
 		VirtualInputManager:SendTouchEvent(1, 1, screenCenter.X, screenCenter.Y)
 		VirtualInputManager:SendTouchEvent(1, 2, screenCenter.X, screenCenter.Y)
 	end)
 end
 
--- Sorting dari angka terbesar ke terkecil (Candy_04 ke Candy_01)
-local function getSortedCandyList(folder)
+-- ==========================================
+-- SORTING DARI JARAK TERDEKAT KE TERJAUH
+-- ==========================================
+local function getSortedCandyListByDistance(folder)
 	local items = folder:GetChildren()
+	local rootPart = getRootPart()
+	
+	if not rootPart then return items end
+	
+	local playerPos = rootPart.Position
+	
 	table.sort(items, function(a, b)
-		return a.Name > b.Name
+		local partA = a:IsA("BasePart") and a or (a:IsA("Model") and (a.PrimaryPart or a:FindFirstChildWhichIsA("BasePart", true)))
+		local partB = b:IsA("BasePart") and b or (b:IsA("Model") and (b.PrimaryPart or b:FindFirstChildWhichIsA("BasePart", true)))
+		
+		if partA and partB then
+			local distA = (partA.Position - playerPos).Magnitude
+			local distB = (partB.Position - playerPos).Magnitude
+			return distA < distB -- Terdekat dahulu
+		end
+		return false
 	end)
+	
 	return items
 end
 
@@ -276,7 +293,8 @@ task.spawn(function()
 				continue
 			end
 			
-			local candyList = getSortedCandyList(candyFolder)
+			-- Mengambil daftar candy yang diurutkan dari jarak terdekat
+			local candyList = getSortedCandyListByDistance(candyFolder)
 			
 			for _, candy in ipairs(candyList) do
 				if not isRunning or not getgenv().CandyMobileFarmRunning then break end
@@ -295,7 +313,7 @@ task.spawn(function()
 						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
 						task.wait(0.1)
 						
-						-- 2. Picu tombol "Pick Up" kustom di layar HP dengan durasi hold lebih lambat
+						-- 2. Picu tombol "Pick Up" kustom di layar HP
 						triggerMobilePickUpButton()
 						
 						-- TouchInterest cadangan
