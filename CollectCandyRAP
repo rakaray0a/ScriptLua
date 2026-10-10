@@ -2,7 +2,7 @@
 -- PENGATURAN PARAMETER
 -- ==========================================
 local TWEEN_SPEED = 350   -- Kecepatan movement
-local HOLD_TIME = 2.0     -- Durasi menahan tombol kustom (diperlamat menjadi 2 detik)
+local HOLD_TIME = 2.5     -- Durasi menahan tombol kustom (diperlamat menjadi 2 detik)
 local COLLECT_DELAY = 1.0 -- Jeda setelah collect
 
 -- ==========================================
