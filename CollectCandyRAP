@@ -2,8 +2,7 @@
 -- PENGATURAN PARAMETER
 -- ==========================================
 local TWEEN_SPEED = 350   -- Kecepatan tween
-local COLLECT_DELAY = 1.2 -- Jeda waktu collect setelah hold
-local MOBILE_HOLD_TIME = 0.8 -- Durasi simulasi hold E di mobile (detik)
+local COLLECT_DELAY = 1.0 -- Jeda waktu setelah collect
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
@@ -15,12 +14,13 @@ end
 getgenv().CandyMobileFarmRunning = true
 
 -- ==========================================
--- KODE UTAMA & UI (PlayerGui - Support Mobile)
+-- KODE UTAMA & UI
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -45,13 +45,13 @@ local function tweenTo(targetCFrame, speed)
 	task.wait(duration)
 end
 
--- Hapus UI lama jika ada agar tidak numpuk
+-- Hapus UI lama jika ada
 if playerGui:FindFirstChild("CandyAutoFarmUI") then
 	playerGui["CandyAutoFarmUI"]:Destroy()
 end
 
 -- ==========================================
--- MEMBUAT UI (PlayerGui + Drag, Minimize, Resize)
+-- MEMBUAT UI (PlayerGui - Drag, Minimize, Resize)
 -- ==========================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CandyAutoFarmUI"
@@ -59,7 +59,6 @@ screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 99999
 
--- Main Frame (Glassmorphism)
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
 mainFrame.Size = UDim2.new(0, 240, 0, 150)
@@ -84,7 +83,7 @@ local titleBar = Instance.new("TextLabel")
 titleBar.Size = UDim2.new(1, 0, 0, 35)
 titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 titleBar.BackgroundTransparency = 0.4
-titleBar.Text = "  🎃 Mobile Candy Auto Farm"
+titleBar.Text = "  🎃 Mobile Custom PickUp Fix"
 titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleBar.TextSize = 12
 titleBar.Font = Enum.Font.GothamBold
@@ -95,7 +94,7 @@ local titleCorner = Instance.new("UICorner")
 titleCorner.CornerRadius = UDim.new(0, 10)
 titleCorner.Parent = titleBar
 
--- Minimize Button (-)
+-- Minimize (-)
 local minButton = Instance.new("TextButton")
 minButton.Size = UDim2.new(0, 30, 0, 30)
 minButton.Position = UDim2.new(1, -65, 0, 2)
@@ -106,7 +105,7 @@ minButton.TextSize = 18
 minButton.Font = Enum.Font.GothamBold
 minButton.Parent = titleBar
 
--- Close Button (X)
+-- Close (X)
 local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 30, 0, 30)
 closeButton.Position = UDim2.new(1, -30, 0, 2)
@@ -117,7 +116,7 @@ closeButton.TextSize = 14
 closeButton.Font = Enum.Font.GothamBold
 closeButton.Parent = titleBar
 
--- Toggle Button On/Off
+-- Toggle Status
 local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0.85, 0, 0, 45)
 toggleButton.Position = UDim2.new(0.075, 0, 0, 50)
@@ -132,7 +131,7 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 8)
 toggleCorner.Parent = toggleButton
 
--- Resize Handle (Pojok kanan bawah)
+-- Resize Handle
 local resizeButton = Instance.new("TextButton")
 resizeButton.Size = UDim2.new(0, 20, 0, 20)
 resizeButton.Position = UDim2.new(1, -20, 1, -20)
@@ -142,9 +141,7 @@ resizeButton.TextColor3 = Color3.fromRGB(150, 150, 150)
 resizeButton.TextSize = 12
 resizeButton.Parent = mainFrame
 
--- ==========================================
--- FITUR DRAG, MINIMIZE, & RESIZE
--- ==========================================
+-- Drag Logic
 local dragging, dragInput, dragStart, startPos
 titleBar.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -223,33 +220,37 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- PROXIMITY HOLD BINDING KHUSUS MOBILE
+-- FUNGSI AUTO KLIK TOMBOL PICK UP DI MOBILE
 -- ==========================================
-local function forceMobileProximityHold(prompt)
-	if not prompt then return end
+local function triggerMobilePickUpButton()
 	pcall(function()
-		prompt.RequiresLineOfSight = false
-		prompt.MaxActivationDistance = 9999
-		
-		-- 1. Picu event InputHoldBegan (Mulai Menahan)
-		if prompt.InputHoldBegan then
-			prompt:InputHoldBegan()
+		-- 1. Cari tombol bertuliskan "Pick Up" di layar/PlayerGui secara otomatis
+		for _, gui in ipairs(playerGui:GetDescendants()) do
+			if (gui:IsA("TextLabel") or gui:IsA("TextButton") or gui:IsA("ImageButton")) then
+				if string.find(string.lower(gui.Name), "pick") or (gui:IsA("TextLabel") and string.find(string.lower(gui.Text), "pick up")) then
+					local btn = gui:FindFirstAncestorWhichIsA("GuiButton") or gui
+					if btn and btn:IsA("GuiButton") then
+						if firesignal then
+							firesignal(btn.Activated)
+							firesignal(btn.MouseButton1Click)
+						end
+					end
+				end
+			end
 		end
 		
-		-- 2. Tahan sesuai durasi hold game
-		task.wait(MOBILE_HOLD_TIME)
+		-- 2. Simulasi sentuhan virtual persis di tengah layar (tempat ikon tangan/jari "Pick Up" muncul)[cite: 2]
+		local viewportSize = Workspace.CurrentCamera.ViewportSize
+		local screenCenter = Vector2.new(viewportSize.X / 2, viewportSize.Y / 2)
 		
-		-- 3. Picu event InputHoldEnded & Triggered (Selesai Menahan)
-		if prompt.InputHoldEnded then
-			prompt:InputHoldEnded()
-		end
-		
-		if fireproximityprompt then
-			fireproximityprompt(prompt)
-		end
+		VirtualInputManager:SendTouchEvent(1, 0, screenCenter.X, screenCenter.Y)
+		task.wait(0.5)
+		VirtualInputManager:SendTouchEvent(1, 1, screenCenter.X, screenCenter.Y)
+		VirtualInputManager:SendTouchEvent(1, 2, screenCenter.X, screenCenter.Y)
 	end)
 end
 
+-- Sorting dari angka terbesar ke terkecil (Candy_04 ke Candy_01)
 local function getSortedCandyList(folder)
 	local items = folder:GetChildren()
 	table.sort(items, function(a, b)
@@ -280,7 +281,6 @@ task.spawn(function()
 				if not isRunning or not getgenv().CandyMobileFarmRunning then break end
 				
 				local targetPart = candy:IsA("BasePart") and candy or (candy:IsA("Model") and (candy.PrimaryPart or candy:FindFirstChildWhichIsA("BasePart", true)))
-				local prompt = candy:FindFirstChildWhichIsA("ProximityPrompt", true)
 				
 				if targetPart then
 					local rootPart = getRootPart()
@@ -290,16 +290,14 @@ task.spawn(function()
 							candyPos = candy:GetPivot().Position
 						end
 						
-						-- 1. Tween tepat ke lokasi candy
+						-- 1. Tween ke lokasi candy
 						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
-						task.wait(0.05)
+						task.wait(0.1)
 						
-						-- 2. Eksekusi Hold Proximity Mobile
-						if prompt then
-							forceMobileProximityHold(prompt)
-						end
+						-- 2. Picu tombol "Pick Up" kustom di layar HP
+						triggerMobilePickUpButton()
 						
-						-- Sentuhan fisik cadangan (TouchInterest)
+						-- TouchInterest cadangan
 						pcall(function()
 							firetouchinterest(rootPart, targetPart, 0)
 							task.wait(0.02)
