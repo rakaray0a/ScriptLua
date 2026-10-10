@@ -3,8 +3,8 @@
 -- ==========================================
 local HOLD_TIME = 1.3       -- Durasi menahan tombol kustom
 local COLLECT_DELAY = 0.5   -- Jeda setelah collect
-local DROP_DELAY = 1.0      -- Jeda waktu ketika berada di lokasi drop candy
-local TELEPORT_DELAY = 0.3  -- Jeda waktu setelah melakukan teleport agar posisi stabil
+local DROP_DELAY = 1.2      -- Jeda waktu ketika berada di lokasi drop candy
+local TELEPORT_DELAY = 0.5  -- Jeda waktu setelah melakukan teleport agar posisi stabil
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
@@ -110,7 +110,7 @@ closeButton.Text = "X"
 closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
 closeButton.TextSize = 14
 closeButton.Font = Enum.Font.GothamBold
-closeButton.Parent = mainFrame
+closeButton.Parent = titleBar
 
 -- Toggle Status
 local toggleButton = Instance.new("TextButton")
@@ -245,33 +245,18 @@ local function triggerMobilePickUpButton()
 end
 
 -- ==========================================
--- SORTING DARI JARAK TERDEKAT KE TERJAUH
+-- SORTING DARI ANGKA TERBESAR KE TERKECIL (Candy_04 ke Candy_01)
 -- ==========================================
-local function getSortedCandyListByDistance(folder)
+local function getSortedCandyListByName(folder)
 	local items = folder:GetChildren()
-	local rootPart = getRootPart()
-	
-	if not rootPart then return items end
-	
-	local playerPos = rootPart.Position
-	
 	table.sort(items, function(a, b)
-		local partA = a:IsA("BasePart") and a or (a:IsA("Model") and (a.PrimaryPart or a:FindFirstChildWhichIsA("BasePart", true)))
-		local partB = b:IsA("BasePart") and b or (b:IsA("Model") and (b.PrimaryPart or b:FindFirstChildWhichIsA("BasePart", true)))
-		
-		if partA and partB then
-			local distA = (partA.Position - playerPos).Magnitude
-			local distB = (partB.Position - playerPos).Magnitude
-			return distA < distB
-		end
-		return false
+		return a.Name > b.Name
 	end)
-	
 	return items
 end
 
 -- ==========================================
--- MAIN LOOP (Teleport Version + Teleport Delay & Drop Delay)
+-- MAIN LOOP (Teleport Version + Name Sorting + Delays)
 -- ==========================================
 task.spawn(function()
 	while getgenv().CandyMobileFarmRunning do
@@ -286,7 +271,8 @@ task.spawn(function()
 				continue
 			end
 			
-			local candyList = getSortedCandyListByDistance(candyFolder)
+			-- Mengambil daftar candy yang diurutkan dari nama/indeks terbesar ke terkecil
+			local candyList = getSortedCandyListByName(candyFolder)
 			
 			for _, candy in ipairs(candyList) do
 				if not isRunning or not getgenv().CandyMobileFarmRunning then break end
