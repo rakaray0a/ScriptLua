@@ -2,7 +2,7 @@
 -- PENGATURAN PARAMETER
 -- ==========================================
 local TWEEN_SPEED = 350   -- Kecepatan tween
-local COLLECT_DELAY = 1.0 -- Jeda waktu setelah collect
+local COLLECT_DELAY = 2.0 -- Jeda waktu setelah collect
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
