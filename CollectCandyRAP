@@ -2,10 +2,11 @@
 -- PENGATURAN PARAMETER
 -- ==========================================
 local TWEEN_SPEED = 350   -- Kecepatan tween
-local COLLECT_DELAY = 1.2 -- Jeda waktu collect (detik)
+local COLLECT_DELAY = 1.2 -- Jeda waktu collect setelah hold
+local MOBILE_HOLD_TIME = 0.8 -- Durasi simulasi hold E di mobile (detik)
 
 -- ==========================================
--- SISTEM ANTI-STACK
+-- SISTEM ANTI-STACK (Mencegah double loop)
 -- ==========================================
 if getgenv().CandyMobileFarmRunning then
 	getgenv().CandyMobileFarmRunning = false
@@ -14,24 +15,16 @@ end
 getgenv().CandyMobileFarmRunning = true
 
 -- ==========================================
--- KODE UTAMA & MOBILE BINDING
+-- KODE UTAMA & UI (PlayerGui - Support Mobile)
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
-local ProximityPromptService = game:GetService("ProximityPromptService")
-local VirtualUser = game:GetService("VirtualUser")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
 local isRunning = false
-
--- Simulasi Klik / Sentuh Layar Otomatis untuk Mobile
-player.Idled:Connect(function()
-	VirtualUser:Button2Down(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-	task.wait(1)
-	VirtualUser:Button2Up(Vector2.new(0,0), Workspace.CurrentCamera.CFrame)
-end)
 
 local function getRootPart()
 	local char = player.Character or player.CharacterAdded:Wait()
@@ -52,53 +45,177 @@ local function tweenTo(targetCFrame, speed)
 	task.wait(duration)
 end
 
--- ==========================================
--- UI PLAYERGUI (Support Delta / Mobile UI)
--- ==========================================
+-- Hapus UI lama jika ada agar tidak numpuk
 if playerGui:FindFirstChild("CandyAutoFarmUI") then
 	playerGui["CandyAutoFarmUI"]:Destroy()
 end
 
+-- ==========================================
+-- MEMBUAT UI (PlayerGui + Drag, Minimize, Resize)
+-- ==========================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CandyAutoFarmUI"
 screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
 screenGui.DisplayOrder = 99999
 
+-- Main Frame (Glassmorphism)
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 230, 0, 140)
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 240, 0, 150)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
-mainFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 35)
-mainFrame.BackgroundTransparency = 0.2
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+mainFrame.BackgroundTransparency = 0.25
+mainFrame.BorderSizePixel = 0
 mainFrame.Parent = screenGui
 
 local uiCorner = Instance.new("UICorner")
 uiCorner.CornerRadius = UDim.new(0, 10)
 uiCorner.Parent = mainFrame
 
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(255, 100, 0)
+uiStroke.Transparency = 0.4
+uiStroke.Thickness = 2
+uiStroke.Parent = mainFrame
+
+-- Title Bar
 local titleBar = Instance.new("TextLabel")
 titleBar.Size = UDim2.new(1, 0, 0, 35)
-titleBar.BackgroundColor3 = Color3.fromRGB(15, 15, 25)
-titleBar.Text = "  📱 Mobile Candy Fix"
+titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+titleBar.BackgroundTransparency = 0.4
+titleBar.Text = "  🎃 Mobile Candy Auto Farm"
 titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleBar.TextSize = 12
 titleBar.Font = Enum.Font.GothamBold
-titleBar.TextSize = 13
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
 
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
+
+-- Minimize Button (-)
+local minButton = Instance.new("TextButton")
+minButton.Size = UDim2.new(0, 30, 0, 30)
+minButton.Position = UDim2.new(1, -65, 0, 2)
+minButton.BackgroundTransparency = 1
+minButton.Text = "-"
+minButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+minButton.TextSize = 18
+minButton.Font = Enum.Font.GothamBold
+minButton.Parent = titleBar
+
+-- Close Button (X)
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 30, 0, 30)
+closeButton.Position = UDim2.new(1, -30, 0, 2)
+closeButton.BackgroundTransparency = 1
+closeButton.Text = "X"
+closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+closeButton.TextSize = 14
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Parent = titleBar
+
+-- Toggle Button On/Off
 local toggleButton = Instance.new("TextButton")
 toggleButton.Size = UDim2.new(0.85, 0, 0, 45)
 toggleButton.Position = UDim2.new(0.075, 0, 0, 50)
 toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 toggleButton.Text = "STATUS: OFF"
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 14
 toggleButton.Font = Enum.Font.GothamBold
 toggleButton.Parent = mainFrame
 
-local btnCorner = Instance.new("UICorner")
-btnCorner.CornerRadius = UDim.new(0, 8)
-btnCorner.Parent = toggleButton
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 8)
+toggleCorner.Parent = toggleButton
 
+-- Resize Handle (Pojok kanan bawah)
+local resizeButton = Instance.new("TextButton")
+resizeButton.Size = UDim2.new(0, 20, 0, 20)
+resizeButton.Position = UDim2.new(1, -20, 1, -20)
+resizeButton.BackgroundTransparency = 1
+resizeButton.Text = "◢"
+resizeButton.TextColor3 = Color3.fromRGB(150, 150, 150)
+resizeButton.TextSize = 12
+resizeButton.Parent = mainFrame
+
+-- ==========================================
+-- FITUR DRAG, MINIMIZE, & RESIZE
+-- ==========================================
+local dragging, dragInput, dragStart, startPos
+titleBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+titleBar.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+-- Minimize Logic
+local isMinimized = false
+minButton.MouseButton1Click:Connect(function()
+	isMinimized = not isMinimized
+	toggleButton.Visible = not isMinimized
+	if isMinimized then
+		mainFrame.Size = UDim2.new(0, 240, 0, 35)
+		minButton.Text = "+"
+	else
+		mainFrame.Size = UDim2.new(0, 240, 0, 150)
+		minButton.Text = "-"
+	end
+end)
+
+-- Close Logic
+closeButton.MouseButton1Click:Connect(function()
+	getgenv().CandyMobileFarmRunning = false
+	screenGui:Destroy()
+end)
+
+-- Resize Logic
+local resizing = false
+resizeButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local mousePos = input.Position
+		local newWidth = math.clamp(mousePos.X - mainFrame.AbsolutePosition.X, 200, 400)
+		local newHeight = math.clamp(mousePos.Y - mainFrame.AbsolutePosition.Y, 110, 300)
+		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+	end
+end)
+
+-- Toggle On/Off Logic
 toggleButton.MouseButton1Click:Connect(function()
 	isRunning = not isRunning
 	toggleButton.Text = isRunning and "STATUS: ON" or "STATUS: OFF"
@@ -106,18 +223,26 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- INTERACTION BYPASS KHUSUS MOBILE
+-- PROXIMITY HOLD BINDING KHUSUS MOBILE
 -- ==========================================
-local function triggerMobilePrompt(prompt)
+local function forceMobileProximityHold(prompt)
 	if not prompt then return end
-	
 	pcall(function()
-		prompt.HoldDuration = 0
 		prompt.RequiresLineOfSight = false
 		prompt.MaxActivationDistance = 9999
 		
-		-- Panggil ProximityPromptService langsung untuk melewatkan handler lokal
-		ProximityPromptService.PromptTriggered:Fire(prompt, player)
+		-- 1. Picu event InputHoldBegan (Mulai Menahan)
+		if prompt.InputHoldBegan then
+			prompt:InputHoldBegan()
+		end
+		
+		-- 2. Tahan sesuai durasi hold game
+		task.wait(MOBILE_HOLD_TIME)
+		
+		-- 3. Picu event InputHoldEnded & Triggered (Selesai Menahan)
+		if prompt.InputHoldEnded then
+			prompt:InputHoldEnded()
+		end
 		
 		if fireproximityprompt then
 			fireproximityprompt(prompt)
@@ -165,19 +290,19 @@ task.spawn(function()
 							candyPos = candy:GetPivot().Position
 						end
 						
-						-- 1. Tween tepat ke atas part
-						tweenTo(CFrame.new(candyPos + Vector3.new(0, 1, 0)), TWEEN_SPEED)
-						task.wait(0.1)
+						-- 1. Tween tepat ke lokasi candy
+						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
+						task.wait(0.05)
 						
-						-- 2. Trigger Bypass Mobile
+						-- 2. Eksekusi Hold Proximity Mobile
 						if prompt then
-							triggerMobilePrompt(prompt)
+							forceMobileProximityHold(prompt)
 						end
 						
-						-- Backup TouchInterest
+						-- Sentuhan fisik cadangan (TouchInterest)
 						pcall(function()
 							firetouchinterest(rootPart, targetPart, 0)
-							task.wait(0.05)
+							task.wait(0.02)
 							firetouchinterest(rootPart, targetPart, 1)
 						end)
 						
