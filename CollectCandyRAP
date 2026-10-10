@@ -2,7 +2,7 @@
 -- PENGATURAN PARAMETER
 -- ==========================================
 local TWEEN_SPEED = 400   -- Kecepatan tween
-local COLLECT_DELAY = 1.0 -- Jeda waktu setelah collect
+local COLLECT_DELAY = 1.2 -- Jeda waktu setelah collect
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
@@ -14,12 +14,13 @@ end
 getgenv().CandyUIAutoFarmRunning = true
 
 -- ==========================================
--- KODE UTAMA & UI (Diubah ke PlayerGui agar muncul di Mobile/Delta)
+-- KODE UTAMA & UI (Support Mobile / Delta)
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
 local playerGui = player:WaitForChild("PlayerGui")
@@ -56,12 +57,12 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CandyAutoFarmUI"
 screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
-screenGui.DisplayOrder = 99999 -- Agar tampil paling depan
+screenGui.DisplayOrder = 99999
 
--- Main Frame (Glassmorphism style)
+-- Main Frame
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 220, 0, 140)
+mainFrame.Size = UDim2.new(0, 240, 0, 160)
 mainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
 mainFrame.BackgroundTransparency = 0.3
@@ -83,9 +84,9 @@ local titleBar = Instance.new("TextLabel")
 titleBar.Size = UDim2.new(1, 0, 0, 35)
 titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
 titleBar.BackgroundTransparency = 0.5
-titleBar.Text = "  🎃 Auto Candy Farm"
+titleBar.Text = "  🎃 Auto Candy Farm (Mobile)"
 titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleBar.TextSize = 14
+titleBar.TextSize = 13
 titleBar.Font = Enum.Font.GothamBold
 titleBar.TextXAlignment = Enum.TextXAlignment.Left
 titleBar.Parent = mainFrame
@@ -105,7 +106,7 @@ minButton.TextSize = 18
 minButton.Font = Enum.Font.GothamBold
 minButton.Parent = titleBar
 
--- Close/Exit Button (X)
+-- Close Button (X)
 local closeButton = Instance.new("TextButton")
 closeButton.Size = UDim2.new(0, 30, 0, 30)
 closeButton.Position = UDim2.new(1, -30, 0, 2)
@@ -116,10 +117,10 @@ closeButton.TextSize = 14
 closeButton.Font = Enum.Font.GothamBold
 closeButton.Parent = titleBar
 
--- Status / Toggle Button On/Off
+-- Toggle Button On/Off
 local toggleButton = Instance.new("TextButton")
-toggleButton.Size = UDim2.new(0.85, 0, 0, 45)
-toggleButton.Position = UDim2.new(0.075, 0, 0, 50)
+toggleButton.Size = UDim2.new(0.85, 0, 0, 40)
+toggleButton.Position = UDim2.new(0.075, 0, 0, 45)
 toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 toggleButton.Text = "STATUS: OFF"
 toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -130,6 +131,21 @@ toggleButton.Parent = mainFrame
 local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 8)
 toggleCorner.Parent = toggleButton
+
+-- Tombol Manual Hold E khusus Mobile (Bisa ditekan manual jika otomatis gagal)
+local manualHoldBtn = Instance.new("TextButton")
+manualHoldBtn.Size = UDim2.new(0.85, 0, 0, 35)
+manualHoldBtn.Position = UDim2.new(0.075, 0, 0, 95)
+manualHoldBtn.BackgroundColor3 = Color3.fromRGB(80, 80, 150)
+manualHoldBtn.Text = "TAP [HOLD E] MANUAL"
+manualHoldBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+manualHoldBtn.TextSize = 12
+manualHoldBtn.Font = Enum.Font.GothamBold
+manualHoldBtn.Parent = mainFrame
+
+local manualCorner = Instance.new("UICorner")
+manualCorner.CornerRadius = UDim.new(0, 8)
+manualCorner.Parent = manualHoldBtn
 
 -- Resize Handle
 local resizeButton = Instance.new("TextButton")
@@ -142,7 +158,7 @@ resizeButton.TextSize = 12
 resizeButton.Parent = mainFrame
 
 -- ==========================================
--- FITUR DRAG, MINIMIZE, & RESIZE UI (Touch & Mouse Support)
+-- FITUR DRAG, MINIMIZE, & RESIZE UI
 -- ==========================================
 local dragging, dragInput, dragStart, startPos
 titleBar.InputBegan:Connect(function(input)
@@ -176,11 +192,12 @@ local isMinimized = false
 minButton.MouseButton1Click:Connect(function()
 	isMinimized = not isMinimized
 	toggleButton.Visible = not isMinimized
+	manualHoldBtn.Visible = not isMinimized
 	if isMinimized then
-		mainFrame.Size = UDim2.new(0, 220, 0, 35)
+		mainFrame.Size = UDim2.new(0, 240, 0, 35)
 		minButton.Text = "+"
 	else
-		mainFrame.Size = UDim2.new(0, 220, 0, 140)
+		mainFrame.Size = UDim2.new(0, 240, 0, 160)
 		minButton.Text = "-"
 	end
 end)
@@ -208,8 +225,8 @@ end)
 UserInputService.InputChanged:Connect(function(input)
 	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local mousePos = input.Position
-		local newWidth = math.clamp(mousePos.X - mainFrame.AbsolutePosition.X, 180, 400)
-		local newHeight = math.clamp(mousePos.Y - mainFrame.AbsolutePosition.Y, 100, 300)
+		local newWidth = math.clamp(mousePos.X - mainFrame.AbsolutePosition.X, 200, 400)
+		local newHeight = math.clamp(mousePos.Y - mainFrame.AbsolutePosition.Y, 120, 300)
 		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
 	end
 end)
@@ -224,6 +241,20 @@ toggleButton.MouseButton1Click:Connect(function()
 		toggleButton.Text = "STATUS: OFF"
 		toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 	end
+end)
+
+-- Fungsi Simulasi Tahan Tombol E secara Virtual untuk Mobile
+local function simulateHoldE()
+	pcall(function()
+		VirtualInputManager:SendKeyEvent(true, Enum.KeyCode.E, false, game)
+		task.wait(1.0) -- Tahan selama 1 detik
+		VirtualInputManager:SendKeyEvent(false, Enum.KeyCode.E, false, game)
+	end)
+end
+
+-- Tombol manual jika ingin ditekan langsung di layar HP saat di depan candy
+manualHoldBtn.MouseButton1Click:Connect(function()
+	simulateHoldE()
 end)
 
 -- ==========================================
@@ -276,7 +307,7 @@ task.spawn(function()
 						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
 						task.wait(0.05)
 						
-						-- 2. Bypass Proximity / Hold untuk Mobile & PC secara instan
+						-- 2. Picu Proximity Prompt & Simulasi Virtual Key E secara otomatis
 						if prompt then
 							pcall(function()
 								prompt.HoldDuration = 0
@@ -285,7 +316,10 @@ task.spawn(function()
 							end)
 						end
 						
-						-- Cadangan sentuhan fisik (TouchInterest)
+						-- Simulasi tombol E virtual untuk HP/Mobile
+						simulateHoldE()
+						
+						-- Sentuhan fisik cadangan (TouchInterest)
 						pcall(function()
 							firetouchinterest(rootPart, targetPart, 0)
 							task.wait(0.02)
