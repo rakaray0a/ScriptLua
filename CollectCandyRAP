@@ -1,26 +1,25 @@
 -- ==========================================
 -- PENGATURAN PARAMETER
 -- ==========================================
-local TWEEN_SPEED = 300   -- Kecepatan tween
-local HOLD_TIME = 1.0     -- Durasi tahan tombol E (sesuaikan jika kurang lama)
-local COLLECT_DELAY = 0.5 -- Jeda setelah collect sebelum ke drop pad
+local TWEEN_SPEED = 400   -- Kecepatan tween
+local COLLECT_DELAY = 1.0 -- Jeda waktu setelah collect
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
 -- ==========================================
-if getgenv().CandyAutoFarmRunning then
-	getgenv().CandyAutoFarmRunning = false
+if getgenv().CandyUIAutoFarmRunning then
+	getgenv().CandyUIAutoFarmRunning = false
 	task.wait(0.3)
 end
-getgenv().CandyAutoFarmRunning = true
+getgenv().CandyUIAutoFarmRunning = true
 
 -- ==========================================
--- KODE UTAMA
+-- KODE UTAMA & UI
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
-local UserInputService = game:GetService("UserInputService")
 local TweenService = game:GetService("TweenService")
+local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
 local isRunning = false
@@ -44,17 +43,187 @@ local function tweenTo(targetCFrame, speed)
 	task.wait(duration)
 end
 
--- Toggle On/Off menggunakan tombol "P"
-local inputConnection
-inputConnection = UserInputService.InputBegan:Connect(function(input, gameProcessed)
-	if gameProcessed then return end
-	if input.KeyCode == Enum.KeyCode.P then
-		isRunning = not isRunning
-		print("Auto Candy Tween:", isRunning and "AKTIF" or "MATI")
+-- ==========================================
+-- MEMBUAT UI (Glassmorphism, Draggable, Resizable, Minimize)
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "CandyAutoFarmUI"
+screenGui.Parent = CoreGui
+screenGui.ResetOnSpawn = false
+
+-- Main Frame (Glassmorphism style)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 220, 0, 140)
+mainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+mainFrame.BackgroundTransparency = 0.3
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 10)
+uiCorner.Parent = mainFrame
+
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(255, 100, 0)
+uiStroke.Transparency = 0.5
+uiStroke.Thickness = 2
+uiStroke.Parent = mainFrame
+
+-- Title Bar
+local titleBar = Instance.new("TextLabel")
+titleBar.Size = UDim2.new(1, 0, 0, 35)
+titleBar.BackgroundColor3 = Color3.fromRGB(20, 20, 30)
+titleBar.BackgroundTransparency = 0.5
+titleBar.Text = "  🎃 Auto Candy Farm"
+titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleBar.TextSize = 14
+titleBar.Font = Enum.Font.GothamBold
+titleBar.TextXAlignment = Enum.TextXAlignment.Left
+titleBar.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
+
+-- Minimize Button (-)
+local minButton = Instance.new("TextButton")
+minButton.Size = UDim2.new(0, 30, 0, 30)
+minButton.Position = UDim2.new(1, -65, 0, 2)
+minButton.BackgroundTransparency = 1
+minButton.Text = "-"
+minButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+minButton.TextSize = 18
+minButton.Font = Enum.Font.GothamBold
+minButton.Parent = titleBar
+
+-- Close/Exit Button (X)
+local closeButton = Instance.new("TextButton")
+closeButton.Size = UDim2.new(0, 30, 0, 30)
+closeButton.Position = UDim2.new(1, -30, 0, 2)
+closeButton.BackgroundTransparency = 1
+closeButton.Text = "X"
+closeButton.TextColor3 = Color3.fromRGB(255, 100, 100)
+closeButton.TextSize = 14
+closeButton.Font = Enum.Font.GothamBold
+closeButton.Parent = titleBar
+
+-- Status / Toggle Button On/Off
+local toggleButton = Instance.new("TextButton")
+toggleButton.Size = UDim2.new(0.85, 0, 0, 45)
+toggleButton.Position = UDim2.new(0.075, 0, 0, 50)
+toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+toggleButton.Text = "STATUS: OFF"
+toggleButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleButton.TextSize = 14
+toggleButton.Font = Enum.Font.GothamBold
+toggleButton.Parent = mainFrame
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 8)
+toggleCorner.Parent = toggleButton
+
+-- Resize Handle (Pojok kanan bawah untuk resize)
+local resizeButton = Instance.new("TextButton")
+resizeButton.Size = UDim2.new(0, 20, 0, 20)
+resizeButton.Position = UDim2.new(1, -20, 1, -20)
+resizeButton.BackgroundTransparency = 1
+resizeButton.Text = "◢"
+resizeButton.TextColor3 = Color3.fromRGB(150, 150, 150)
+resizeButton.TextSize = 12
+resizeButton.Parent = mainFrame
+
+-- ==========================================
+-- FITUR DRAG, MINIMIZE, & RESIZE UI
+-- ==========================================
+local UserInputService = game:GetService("UserInputService")
+
+local dragging, dragInput, dragStart, startPos
+titleBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
 	end
 end)
 
--- Fungsi sort dari terbesar ke terkecil (Candy_04 ke Candy_01)
+titleBar.InputChanged:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		dragInput = input
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if input == dragInput and dragging then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+end)
+
+-- Minimize Logic
+local isMinimized = false
+minButton.MouseButton1Click:Connect(function()
+	isMinimized = not isMinimized
+	toggleButton.Visible = not isMinimized
+	if isMinimized then
+		mainFrame.Size = UDim2.new(0, 220, 0, 35)
+		minButton.Text = "+"
+	else
+		mainFrame.Size = UDim2.new(0, 220, 0, 140)
+		minButton.Text = "-"
+	end
+end)
+
+-- Close Logic
+closeButton.MouseButton1Click:Connect(function()
+	getgenv().CandyUIAutoFarmRunning = false
+	screenGui:Destroy()
+end)
+
+-- Resize Logic
+local resizing = false
+resizeButton.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = true
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = false
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local mousePos = input.Position
+		local newWidth = math.clamp(mousePos.X - mainFrame.AbsolutePosition.X, 180, 400)
+		local newHeight = math.clamp(mousePos.Y - mainFrame.AbsolutePosition.Y, 100, 300)
+		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+	end
+end)
+
+-- Toggle Button Aksi
+toggleButton.MouseButton1Click:Connect(function()
+	isRunning = not isRunning
+	if isRunning then
+		toggleButton.Text = "STATUS: ON"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(50, 200, 50)
+	else
+		toggleButton.Text = "STATUS: OFF"
+		toggleButton.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+	end
+end)
+
+-- ==========================================
+-- MAIN LOOP AUTO FARM
+-- ==========================================
 local function getSortedCandyList(folder)
 	local items = folder:GetChildren()
 	table.sort(items, function(a, b)
@@ -63,9 +232,8 @@ local function getSortedCandyList(folder)
 	return items
 end
 
--- Main Loop
 task.spawn(function()
-	while getgenv().CandyAutoFarmRunning do
+	while getgenv().CandyUIAutoFarmRunning do
 		task.wait(0.2)
 		
 		if isRunning then
@@ -80,7 +248,7 @@ task.spawn(function()
 			local candyList = getSortedCandyList(candyFolder)
 			
 			for _, candy in ipairs(candyList) do
-				if not isRunning or not getgenv().CandyAutoFarmRunning then break end
+				if not isRunning or not getgenv().CandyUIAutoFarmRunning then break end
 				
 				local targetPart = nil
 				if candy:IsA("BasePart") then
@@ -88,6 +256,8 @@ task.spawn(function()
 				elseif candy:IsA("Model") then
 					targetPart = candy.PrimaryPart or candy:FindFirstChildWhichIsA("BasePart", true)
 				end
+				
+				local prompt = candy:FindFirstChildWhichIsA("ProximityPrompt", true)
 				
 				if targetPart then
 					local rootPart = getRootPart()
@@ -97,22 +267,24 @@ task.spawn(function()
 							candyPos = candy:GetPivot().Position
 						end
 						
-						-- 1. Tween tepat ke lokasi candy
+						-- 1. Tween ke posisi candy
 						tweenTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)), TWEEN_SPEED)
-						task.wait(0.1)
+						task.wait(0.05)
 						
-						-- 2. Simulasi Tekan & Tahan Tombol E secara Hardware (Menggunakan keypress/keyrelease)
+						-- 2. Bypass Proximity / Hold untuk Mobile & PC secara instan
+						if prompt then
+							pcall(function()
+								prompt.HoldDuration = 0
+								prompt.MaxActivationDistance = 9999
+								fireproximityprompt(prompt)
+							end)
+						end
+						
+						-- Cadangan sentuhan fisik (TouchInterest)
 						pcall(function()
-							if keypress and keyrelease then
-								keypress(0x45) -- 0x45 adalah kode hex untuk tombol 'E'
-								task.wait(HOLD_TIME) -- Tahan selama durasi tertentu
-								keyrelease(0x45)
-							elseif vim then
-								-- Alternatif jika executor menggunakan VirtualInputManager wrapper (vim)
-								vim:SendKeyEvent(true, Enum.KeyCode.E, false, game)
-								task.wait(HOLD_TIME)
-								vim:SendKeyEvent(false, Enum.KeyCode.E, false, game)
-							end
+							firetouchinterest(rootPart, targetPart, 0)
+							task.wait(0.02)
+							firetouchinterest(rootPart, targetPart, 1)
 						end)
 						
 						task.wait(COLLECT_DELAY)
@@ -128,9 +300,4 @@ task.spawn(function()
 			task.wait(0.5)
 		end
 	end
-	
-	if inputConnection then
-		inputConnection:Disconnect()
-	end
-	print("Auto Candy Script dihentikan.")
 end)
