@@ -34,7 +34,7 @@ local function getRootPart()
 	return char:FindFirstChild("HumanoidRootPart")
 end
 
--- Fungsi Teleport Instan ke Candy
+-- 1. FUNGSI TELEPORT INSTAN (Hanya untuk ke lokasi Candy)
 local function teleportTo(targetCFrame)
 	local rootPart = getRootPart()
 	if rootPart then
@@ -43,7 +43,7 @@ local function teleportTo(targetCFrame)
 	end
 end
 
--- Fungsi Tween ke DropOff Pad
+-- 2. FUNGSI TWEEN (Khusus untuk kembali ke Drop Pad)
 local function tweenTo(targetCFrame, speed)
 	local rootPart = getRootPart()
 	if not rootPart then return end
@@ -273,7 +273,7 @@ local function getSortedCandyListByName(folder)
 end
 
 -- ==========================================
--- MAIN LOOP (Teleport ke Candy + Tween Ke Drop Pad)
+-- MAIN LOOP (Teleport ke Candy + Tween ke Drop Pad)
 -- ==========================================
 task.spawn(function()
 	while getgenv().CandyMobileFarmRunning do
@@ -303,7 +303,7 @@ task.spawn(function()
 							candyPos = candy:GetPivot().Position
 						end
 						
-						-- 1. TELEPORT INSTAN ke lokasi candy
+						-- 1. TELEPORT INSTAN khusus saat menuju lokasi candy
 						teleportTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)))
 						
 						-- 2. Picu tombol "Pick Up" kustom di layar HP
@@ -318,7 +318,7 @@ task.spawn(function()
 						
 						task.wait(COLLECT_DELAY)
 						
-						-- 3. TWEEN CEPAAT (Kecepatan 350) ke DropOff Pad
+						-- 3. TWEEN CEPAAT (Speed 350) saat kembali ke DropOff Pad
 						local dropPos = dropOffPad.Position
 						tweenTo(CFrame.new(dropPos + Vector3.new(0, 3, 0)), TWEEN_SPEED)
 						
