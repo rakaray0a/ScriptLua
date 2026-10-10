@@ -14,14 +14,15 @@ end
 getgenv().CandyUIAutoFarmRunning = true
 
 -- ==========================================
--- KODE UTAMA & UI
+-- KODE UTAMA & UI (Diubah ke PlayerGui agar muncul di Mobile/Delta)
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local TweenService = game:GetService("TweenService")
-local CoreGui = game:GetService("CoreGui")
+local UserInputService = game:GetService("UserInputService")
 
 local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
 local isRunning = false
 
 local function getRootPart()
@@ -43,13 +44,19 @@ local function tweenTo(targetCFrame, speed)
 	task.wait(duration)
 end
 
+-- Hapus UI lama jika ada agar tidak numpuk
+if playerGui:FindFirstChild("CandyAutoFarmUI") then
+	playerGui["CandyAutoFarmUI"]:Destroy()
+end
+
 -- ==========================================
--- MEMBUAT UI (Glassmorphism, Draggable, Resizable, Minimize)
+-- MEMBUAT UI (PlayerGui - Support Mobile)
 -- ==========================================
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "CandyAutoFarmUI"
-screenGui.Parent = CoreGui
+screenGui.Parent = playerGui
 screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 99999 -- Agar tampil paling depan
 
 -- Main Frame (Glassmorphism style)
 local mainFrame = Instance.new("Frame")
@@ -124,7 +131,7 @@ local toggleCorner = Instance.new("UICorner")
 toggleCorner.CornerRadius = UDim.new(0, 8)
 toggleCorner.Parent = toggleButton
 
--- Resize Handle (Pojok kanan bawah untuk resize)
+-- Resize Handle
 local resizeButton = Instance.new("TextButton")
 resizeButton.Size = UDim2.new(0, 20, 0, 20)
 resizeButton.Position = UDim2.new(1, -20, 1, -20)
@@ -135,10 +142,8 @@ resizeButton.TextSize = 12
 resizeButton.Parent = mainFrame
 
 -- ==========================================
--- FITUR DRAG, MINIMIZE, & RESIZE UI
+-- FITUR DRAG, MINIMIZE, & RESIZE UI (Touch & Mouse Support)
 -- ==========================================
-local UserInputService = game:GetService("UserInputService")
-
 local dragging, dragInput, dragStart, startPos
 titleBar.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
@@ -222,7 +227,7 @@ toggleButton.MouseButton1Click:Connect(function()
 end)
 
 -- ==========================================
--- MAIN LOOP AUTO FARM
+-- MAIN LOOP AUTO FARM (Urutan Besar ke Kecil)
 -- ==========================================
 local function getSortedCandyList(folder)
 	local items = folder:GetChildren()
