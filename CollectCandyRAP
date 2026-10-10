@@ -1,10 +1,11 @@
 -- ==========================================
 -- PENGATURAN PARAMETER
 -- ==========================================
+local TWEEN_SPEED = 350     -- Kecepatan tween menuju lokasi drop pad
 local HOLD_TIME = 1.3       -- Durasi menahan tombol kustom
 local COLLECT_DELAY = 0.5   -- Jeda setelah collect
-local DROP_DELAY = 2.0      -- Jeda waktu ketika berada di lokasi drop candy
-local TELEPORT_DELAY = 2.5  -- Jeda waktu setelah melakukan teleport agar posisi stabil
+local DROP_DELAY = 1.2      -- Jeda waktu ketika berada di lokasi drop candy
+local TELEPORT_DELAY = 0.3  -- Jeda waktu setelah melakukan teleport agar posisi stabil
 
 -- ==========================================
 -- SISTEM ANTI-STACK (Mencegah double loop)
@@ -20,6 +21,7 @@ getgenv().CandyMobileFarmRunning = true
 -- ==========================================
 local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
+local TweenService = game:GetService("TweenService")
 local UserInputService = game:GetService("UserInputService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 
@@ -32,13 +34,28 @@ local function getRootPart()
 	return char:FindFirstChild("HumanoidRootPart")
 end
 
--- Fungsi Teleport Instan dengan jeda stabilisasi
+-- Fungsi Teleport Instan ke Candy
 local function teleportTo(targetCFrame)
 	local rootPart = getRootPart()
 	if rootPart then
 		rootPart.CFrame = targetCFrame
 		task.wait(TELEPORT_DELAY)
 	end
+end
+
+-- Fungsi Tween ke DropOff Pad
+local function tweenTo(targetCFrame, speed)
+	local rootPart = getRootPart()
+	if not rootPart then return end
+	
+	local distance = (rootPart.Position - targetCFrame.Position).Magnitude
+	local duration = math.max(distance / speed, 0.05)
+	
+	local tweenInfo = TweenInfo.new(duration, Enum.EasingStyle.Linear, Enum.EasingDirection.Out)
+	local tween = TweenService:Create(rootPart, tweenInfo, {CFrame = targetCFrame})
+	
+	tween:Play()
+	task.wait(duration)
 end
 
 -- Hapus UI lama jika ada
@@ -256,7 +273,7 @@ local function getSortedCandyListByName(folder)
 end
 
 -- ==========================================
--- MAIN LOOP (Teleport Version + Name Sorting + Delays)
+-- MAIN LOOP (Teleport ke Candy + Tween Ke Drop Pad)
 -- ==========================================
 task.spawn(function()
 	while getgenv().CandyMobileFarmRunning do
@@ -271,7 +288,6 @@ task.spawn(function()
 				continue
 			end
 			
-			-- Mengambil daftar candy yang diurutkan dari nama/indeks terbesar ke terkecil
 			local candyList = getSortedCandyListByName(candyFolder)
 			
 			for _, candy in ipairs(candyList) do
@@ -287,7 +303,7 @@ task.spawn(function()
 							candyPos = candy:GetPivot().Position
 						end
 						
-						-- 1. Teleport instan ke lokasi candy (dengan jeda stabilisasi)
+						-- 1. TELEPORT INSTAN ke lokasi candy
 						teleportTo(CFrame.new(candyPos + Vector3.new(0, 0.5, 0)))
 						
 						-- 2. Picu tombol "Pick Up" kustom di layar HP
@@ -302,9 +318,9 @@ task.spawn(function()
 						
 						task.wait(COLLECT_DELAY)
 						
-						-- 3. Teleport instan ke DropOff Pad (dengan jeda stabilisasi)
+						-- 3. TWEEN CEPAAT (Kecepatan 350) ke DropOff Pad
 						local dropPos = dropOffPad.Position
-						teleportTo(CFrame.new(dropPos + Vector3.new(0, 3, 0)))
+						tweenTo(CFrame.new(dropPos + Vector3.new(0, 3, 0)), TWEEN_SPEED)
 						
 						-- 4. Jeda waktu (delay) saat berada di lokasi drop candy
 						task.wait(DROP_DELAY)
