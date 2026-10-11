@@ -1,4 +1,4 @@
---// Unique Identifier untuk Cleanup
+--// Unique Identifier untuk Re-execution
 local SCRIPT_ID = "YinYangESP_Executor_System"
 
 --// Cleanup Versi Sebelumnya Jika Sudah Berjalan
@@ -12,10 +12,14 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
+local TweenService = game:GetService("TweenService")
+local ProximityPromptService = game:GetService("ProximityPromptService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
 
 local player = Players.LocalPlayer
+local camera = Workspace.CurrentCamera
 
---// Penentuan Parent UI yang Safe untuk Executor (CoreGui / gethui / PlayerGui)
+--// Parent GUI Container
 local parentContainer = player:WaitForChild("PlayerGui")
 if gethui then
 	parentContainer = gethui()
@@ -27,18 +31,22 @@ elseif CoreGui then
 	end)
 end
 
--- Core Storage
+-- Core State
 local ScriptState = {
 	Connections = {},
 	activeHighlights = {},
 	activeBillboards = {},
 	trackedModels = {},
 	espEnabled = false,
-	spawnedStatus = { Yin = false, Yang = false }
+	autoCollectEnabled = false,
+	spawnedStatus = { Yin = false, Yang = false },
+	collectedCount = 0, -- Menghitung jumlah item (Yin/Yang) yang diproses
+	lastTargetModel = nil,
+	isRitualInProgress = false
 }
 
 ----------------------------------------------------------------
---// FUNSI CLEANUP TOTAL
+--// FUNGSI CLEANUP TOTAL
 ----------------------------------------------------------------
 function ScriptState.Cleanup()
 	for _, conn in ipairs(ScriptState.Connections) do
@@ -80,7 +88,7 @@ end
 _G[SCRIPT_ID] = ScriptState
 
 ----------------------------------------------------------------
---// FUNSI CUSTOM DRAGGABLE (Aman untuk Delta Mobile & PC)
+--// FUNGSI CUSTOM DRAGGABLE
 ----------------------------------------------------------------
 local function makeDraggable(topBar, mainFrame)
 	local dragging = false
@@ -128,10 +136,10 @@ screenGui.DisplayOrder = 999999999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = parentContainer
 
--- A. Panel Kontrol ESP
+-- Panel Kontrol Utama
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "ESPController"
-mainFrame.Size = UDim2.new(0, 220, 0, 130)
+mainFrame.Size = UDim2.new(0, 220, 0, 180)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 mainFrame.BackgroundTransparency = 0.2
@@ -165,7 +173,7 @@ titleText.Size = UDim2.new(1, -70, 1, 0)
 titleText.Position = UDim2.new(0, 12, 0, 0)
 titleText.BackgroundTransparency = 1
 titleText.Font = Enum.Font.GothamBold
-titleText.Text = "Ritual ESP (Yin/Yang)"
+titleText.Text = "Ritual ESP & Auto"
 titleText.TextColor3 = Color3.fromRGB(240, 240, 255)
 titleText.TextSize = 13
 titleText.TextXAlignment = Enum.TextXAlignment.Left
@@ -193,23 +201,32 @@ contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.9, 0, 0, 40)
-toggleBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.Text = "ESP: OFF"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-toggleBtn.TextSize = 14
+toggleBtn.TextSize = 13
 toggleBtn.Parent = contentFrame
 
 local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 8)
 btnCorner.Parent = toggleBtn
 
-local btnStroke = Instance.new("UIStroke")
-btnStroke.Color = Color3.fromRGB(80, 80, 100)
-btnStroke.Thickness = 1
-btnStroke.Parent = toggleBtn
+local autoBtn = Instance.new("TextButton")
+autoBtn.Size = UDim2.new(0.9, 0, 0, 35)
+autoBtn.Position = UDim2.new(0.05, 0, 0.55, 0)
+autoBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+autoBtn.Font = Enum.Font.GothamBold
+autoBtn.Text = "Auto-Ritual: OFF"
+autoBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+autoBtn.TextSize = 13
+autoBtn.Parent = contentFrame
+
+local autoCorner = Instance.new("UICorner")
+autoCorner.CornerRadius = UDim.new(0, 8)
+autoCorner.Parent = autoBtn
 
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Size = UDim2.new(0, 20, 0, 20)
@@ -220,7 +237,7 @@ resizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
--- B. Panel Notifikasi Spawn
+-- Panel Notifikasi Status
 local notifFrame = Instance.new("Frame")
 notifFrame.Name = "SpawnNotifierPanel"
 notifFrame.Size = UDim2.new(0, 280, 0, 110)
@@ -234,11 +251,6 @@ notifFrame.Parent = screenGui
 local notifCorner = Instance.new("UICorner")
 notifCorner.CornerRadius = UDim.new(0, 10)
 notifCorner.Parent = notifFrame
-
-local notifStroke = Instance.new("UIStroke")
-notifStroke.Color = Color3.fromRGB(100, 80, 150)
-notifStroke.Thickness = 1.5
-notifStroke.Parent = notifFrame
 
 local notifTitleBar = Instance.new("Frame")
 notifTitleBar.Name = "TitleBar"
@@ -306,7 +318,6 @@ notifResizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
 notifResizeHandle.TextSize = 12
 notifResizeHandle.Parent = notifFrame
 
--- Pasang Fitur Drag Manual ke TitleBar Kedua Frame
 makeDraggable(titleBar, mainFrame)
 makeDraggable(notifTitleBar, notifFrame)
 
@@ -322,7 +333,7 @@ table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function(
 		minBtn.Text = "+"
 		resizeHandle.Visible = false
 	else
-		mainFrame.Size = UDim2.new(0, 220, 0, 130)
+		mainFrame.Size = UDim2.new(0, 220, 0, 180)
 		minBtn.Text = "-"
 		resizeHandle.Visible = true
 	end
@@ -343,7 +354,6 @@ table.insert(ScriptState.Connections, notifMinBtn.MouseButton1Click:Connect(func
 	end
 end))
 
--- Resize Handlers
 local draggingResizeESP = false
 local startMousePosESP, startSizeESP
 
@@ -370,7 +380,7 @@ table.insert(ScriptState.Connections, UserInputService.InputChanged:Connect(func
 	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 		if draggingResizeESP then
 			local delta = input.Position - startMousePosESP
-			mainFrame.Size = UDim2.new(0, math.clamp(startSizeESP.X + delta.X, 180, 400), 0, math.clamp(startSizeESP.Y + delta.Y, 100, 300))
+			mainFrame.Size = UDim2.new(0, math.clamp(startSizeESP.X + delta.X, 180, 400), 0, math.clamp(startSizeESP.Y + delta.Y, 120, 300))
 		elseif draggingResizeNotif then
 			local delta = input.Position - startMousePosNotif
 			notifFrame.Size = UDim2.new(0, math.clamp(startSizeNotif.X + delta.X, 220, 450), 0, math.clamp(startSizeNotif.Y + delta.Y, 70, 250))
@@ -386,25 +396,197 @@ table.insert(ScriptState.Connections, UserInputService.InputEnded:Connect(functi
 end))
 
 ----------------------------------------------------------------
---// 3. LOGIKA ESP & SPAWN SENSING
+--// 3. FUNGSI PEMICU PROXIMITYPROMPT MULTI-METHOD
 ----------------------------------------------------------------
-local function updateNotificationText()
-	local yinStatus = ScriptState.spawnedStatus.Yin and "🟢 SPAWN (ADA)" or "🔴 BELUM ADA"
-	local yangStatus = ScriptState.spawnedStatus.Yang and "🟢 SPAWN (ADA)" or "🔴 BELUM ADA"
-	
-	statusTextLabel.Text = string.format("☯️ STATUS MODEL RITUAL:\n• Yin: %s\n• Yang: %s", yinStatus, yangStatus)
+local function firePromptCustom(prompt)
+	if not prompt then return end
+	pcall(function()
+		if fireproximityprompt then
+			fireproximityprompt(prompt, 0)
+			fireproximityprompt(prompt, prompt.HoldDuration or 0)
+		end
+		prompt:InputHoldBegin()
+		local duration = prompt.HoldDuration > 0 and prompt.HoldDuration or 0.2
+		task.wait(duration + 0.05)
+		prompt:InputHoldEnd()
+		if prompt.Enabled then prompt:Trigger() end
+	end)
 end
 
-local function getRuntimeFolder()
-	local ritual = Workspace:FindFirstChild("HeadlessRitual")
-	if ritual then
-		return ritual:FindFirstChild("Runtime")
+local function triggerAutoPickup(model)
+	if not model then return end
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("ProximityPrompt") then
+			firePromptCustom(desc)
+		end
 	end
-	return nil
+end
+
+----------------------------------------------------------------
+--// 4. LOGIKA SEKUENSIL RITUAL (SEAL -> REWARDS -> DROPOFF -> LOOP)
+----------------------------------------------------------------
+local function safeTeleport(cframe)
+	local char = player.Character
+	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+	if rootPart then
+		rootPart.CFrame = cframe
+		pcall(function()
+			local tween = TweenService:Create(rootPart, TweenInfo.new(0.1, Enum.EasingStyle.Linear), {CFrame = cframe})
+			tween:Play()
+		end)
+	end
+end
+
+local function processSealAndRewards()
+	if ScriptState.isRitualInProgress then return end
+	ScriptState.isRitualInProgress = true
+
+	task.spawn(function()
+		local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
+		local sealModel = headlessRitual and headlessRitual:FindFirstChild("Seal")
+		
+		if sealModel then
+			statusTextLabel.Text = "🔮 Teleporting ke Seal..."
+			local sealPart = sealModel:FindFirstChildWhichIsA("BasePart", true) or sealModel
+			local targetCFrame = (sealPart:IsA("BasePart") and sealPart.CFrame or CFrame.new()) * CFrame.new(0, 1, 3)
+			
+			-- 1. Teleport ke Model Seal
+			safeTeleport(targetCFrame)
+			ScriptState.lastTargetModel = sealPart
+			task.wait(0.5)
+
+			-- 2. Mencari & Menekan KEDUA input di Seal secara bergantian satu per satu
+			statusTextLabel.Text = "⚡ Meletakkan Yin & Yang di Seal (1 per 1)..."
+			local sealPrompts = {}
+			for _, desc in ipairs(sealModel:GetDescendants()) do
+				if desc:IsA("ProximityPrompt") then
+					table.insert(sealPrompts, desc)
+				end
+			end
+
+			-- Eksekusi satu per satu dengan jeda aman agar tidak berbenturan
+			for _, prompt in ipairs(sealPrompts) do
+				firePromptCustom(prompt)
+				task.wait(1.5) -- Jeda aman untuk menekan input berikutnya
+			end
+
+			task.wait(1)
+
+			-- 3. Teleport langsung ke Folder yang Mengandung kata "Rewards" di Runtime
+			local runtimeFolder = headlessRitual:FindFirstChild("Runtime")
+			if runtimeFolder then
+				local rewardsFolder = nil
+				-- Tunggu sebentar sampai folder Rewards dimuat oleh game
+				for i = 1, 10 do
+					for _, child in ipairs(runtimeFolder:GetChildren()) do
+						if child:IsA("Folder") and string.find(child.Name, "Rewards") then
+							rewardsFolder = child
+							break
+						end
+					end
+					if rewardsFolder then break end
+					task.wait(0.3)
+				end
+
+				if rewardsFolder then
+					statusTextLabel.Text = "🎁 Auto-Pickup Rewards di Goa..."
+					
+					-- Kumpulkan seluruh item di folder Rewards
+					local itemsToCollect = {}
+					for _, child in ipairs(rewardsFolder:GetChildren()) do
+						table.insert(itemsToCollect, child)
+					end
+
+					-- Teleport dan tekan prompt pada setiap item reward secara berurutan
+					for _, item in ipairs(itemsToCollect) do
+						local part = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
+						if part then
+							safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
+							ScriptState.lastTargetModel = part
+							task.wait(0.2)
+						end
+						triggerAutoPickup(item)
+						task.wait(0.6)
+					end
+				end
+			end
+
+			-- 4. Teleport ke Workspace.CandyDropOff.Pad
+			statusTextLabel.Text = "🏃 Teleporting ke Candy DropOff..."
+			local dropOff = Workspace:FindFirstChild("CandyDropOff")
+			local pad = dropOff and dropOff:FindFirstChild("Pad")
+			if pad then
+				local padPart = pad:IsA("BasePart") and pad or pad:FindFirstChildWhichIsA("BasePart", true)
+				if padPart then
+					safeTeleport(padPart.CFrame * CFrame.new(0, 2, 0))
+					statusTextLabel.Text = "✅ Ritual Selesai! Menunggu Spawn Berikutnya..."
+				end
+			end
+		end
+
+		-- Reset Status untuk Looping Berikutnya
+		ScriptState.collectedCount = 0
+		ScriptState.lastTargetModel = nil
+		ScriptState.isRitualInProgress = false
+	end)
+end
+
+----------------------------------------------------------------
+--// 5. LOGIKA ESP & AUTO-TELEPORT (SKIP IF FAIL -> TELEPORT TO SEAL)
+----------------------------------------------------------------
+local function performAutoTeleport(model)
+	if not ScriptState.autoCollectEnabled or ScriptState.isRitualInProgress then return end
+	if not model or not model.Parent then return end
+
+	task.spawn(function()
+		local targetPart = nil
+		for i = 1, 15 do
+			targetPart = model:FindFirstChildWhichIsA("BasePart", true)
+			if targetPart then break end
+			task.wait(0.05)
+		end
+
+		local char = player.Character
+		local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+
+		if rootPart and targetPart then
+			safeTeleport(targetPart.CFrame * CFrame.new(0, 1, 1.5))
+			ScriptState.lastTargetModel = targetPart
+
+			local pickedUpSuccess = false
+			-- Coba pickup beberapa kali
+			for i = 1, 6 do
+				if not model or not model.Parent then 
+					pickedUpSuccess = true
+					break 
+				end
+				triggerAutoPickup(model)
+				task.wait(0.15)
+			end
+
+			-- Jika item berhasil hilang (ter-pickup) atau gagal (tidak bisa dipickup), tambah counter
+			ScriptState.collectedCount = ScriptState.collectedCount + 1
+
+			-- Jika sudah memproses 2 item (Yin & Yang) atau item terakhir di map, langsung teleport ke Seal
+			if ScriptState.collectedCount >= 2 or not pickedUpSuccess then
+				processSealAndRewards()
+			end
+		end
+	end)
+end
+
+local function updateNotificationText()
+	local yinStatus = ScriptState.spawnedStatus.Yin and "🟢 SPAWN" or "🔴 BELUM ADA"
+	local yangStatus = ScriptState.spawnedStatus.Yang and "🟢 SPAWN" or "🔴 BELUM ADA"
+	
+	if not ScriptState.isRitualInProgress then
+		statusTextLabel.Text = string.format("☯️ STATUS RITUAL:\n• Yin: %s\n• Yang: %s", yinStatus, yangStatus)
+	end
 end
 
 local function checkStatusRealtime()
-	local runtimeFolder = getRuntimeFolder()
+	local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
+	local runtimeFolder = headlessRitual and headlessRitual:FindFirstChild("Runtime")
 	local hasYin, hasYang = false, false
 	
 	if runtimeFolder then
@@ -413,7 +595,7 @@ local function checkStatusRealtime()
 			if child.Name == "Yang" then hasYang = true end
 		end
 	end
-	
+
 	ScriptState.spawnedStatus.Yin = hasYin
 	ScriptState.spawnedStatus.Yang = hasYang
 	updateNotificationText()
@@ -437,14 +619,11 @@ local function removeESP(model)
 	checkStatusRealtime()
 end
 
-local function clearAllESP()
-	for model, _ in pairs(ScriptState.activeHighlights) do
-		removeESP(model)
-	end
-end
-
 local function createESP(model)
 	if not model or not model:IsA("Model") then return end
+	
+	performAutoTeleport(model)
+
 	if ScriptState.activeHighlights[model] then return end
 
 	local modelName = model.Name
@@ -491,28 +670,25 @@ local function createESP(model)
 	ScriptState.trackedModels[model] = {}
 	
 	local connAncestry = model.AncestryChanged:Connect(function(_, parent)
-		local runtimeFolder = getRuntimeFolder()
+		local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
+		local runtimeFolder = headlessRitual and headlessRitual:FindFirstChild("Runtime")
 		if not parent or (runtimeFolder and not model:IsDescendantOf(runtimeFolder)) then
 			removeESP(model)
 		end
 	end)
-	
-	local connDestroying = model.Destroying:Connect(function()
-		removeESP(model)
-	end)
 
 	table.insert(ScriptState.trackedModels[model], connAncestry)
-	table.insert(ScriptState.trackedModels[model], connDestroying)
-
 	checkStatusRealtime()
 end
 
 local function scanRuntime()
-	local runtimeFolder = getRuntimeFolder()
+	local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
+	local runtimeFolder = headlessRitual and headlessRitual:FindFirstChild("Runtime")
 	if not runtimeFolder then return end
 	
 	for _, child in ipairs(runtimeFolder:GetChildren()) do
 		if child.Name == "Yin" or child.Name == "Yang" then
+			performAutoTeleport(child)
 			if ScriptState.espEnabled then
 				createESP(child)
 			end
@@ -521,7 +697,7 @@ local function scanRuntime()
 	checkStatusRealtime()
 end
 
--- Monitor Runtime Loop
+-- Monitor Runtime Loop (Mendeteksi Spawn/Despawn berulang)
 task.spawn(function()
 	local activeThread = true
 	table.insert(ScriptState.Connections, {
@@ -531,7 +707,9 @@ task.spawn(function()
 
 	while activeThread do
 		task.wait(0.5)
-		local runtimeFolder = getRuntimeFolder()
+		local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
+		local runtimeFolder = headlessRitual and headlessRitual:FindFirstChild("Runtime")
+		
 		if runtimeFolder then
 			checkStatusRealtime()
 			if not runtimeFolder:FindFirstChild("_Connected_" .. SCRIPT_ID) then
@@ -540,8 +718,9 @@ task.spawn(function()
 				marker.Parent = runtimeFolder
 
 				table.insert(ScriptState.Connections, runtimeFolder.ChildAdded:Connect(function(child)
-					task.wait(0.1)
+					task.wait(0.02)
 					if child.Name == "Yin" or child.Name == "Yang" then
+						performAutoTeleport(child)
 						if ScriptState.espEnabled then
 							createESP(child)
 						end
@@ -557,7 +736,14 @@ task.spawn(function()
 	end
 end)
 
--- Toggle Button ESP
+-- Listener Global PromptShown
+table.insert(ScriptState.Connections, ProximityPromptService.PromptShown:Connect(function(prompt)
+	if ScriptState.autoCollectEnabled then
+		firePromptCustom(prompt)
+	end
+end))
+
+-- Toggle ESP Button
 table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(function()
 	ScriptState.espEnabled = not ScriptState.espEnabled
 	if ScriptState.espEnabled then
@@ -571,13 +757,36 @@ table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(functi
 	end
 end))
 
--- Update RenderStepped Real-Time Jarak
+-- Toggle Auto-Ritual Button
+table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function()
+	ScriptState.autoCollectEnabled = not ScriptState.autoCollectEnabled
+	if ScriptState.autoCollectEnabled then
+		autoBtn.Text = "Auto-Ritual: ON"
+		autoBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+		scanRuntime()
+	else
+		autoBtn.Text = "Auto-Ritual: OFF"
+		autoBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+		ScriptState.lastTargetModel = nil
+	end
+end))
+
+-- RenderStepped Distance & Camera Lock
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
 
+	-- Camera Lock ke arah target aktif (Item/Seal/Rewards)
+	if ScriptState.autoCollectEnabled and ScriptState.lastTargetModel and ScriptState.lastTargetModel.Parent then
+		pcall(function()
+			local targetPos = ScriptState.lastTargetModel.Position
+			camera.CFrame = CFrame.new(camera.CFrame.Position, targetPos)
+		end)
+	end
+
 	for model, data in pairs(ScriptState.activeBillboards) do
-		local runtimeFolder = getRuntimeFolder()
+		local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
+		local runtimeFolder = headlessRitual and headlessRitual:FindFirstChild("Runtime")
 		if not model or not model.Parent or (runtimeFolder and not model:IsDescendantOf(runtimeFolder)) then
 			removeESP(model)
 		elseif ScriptState.espEnabled and rootPart then
