@@ -1,0 +1,404 @@
+--// Unique Identifier untuk Cleanup
+local SCRIPT_ID = "YinYangESP_Executor_System"
+
+--// Cleanup Versi Sebelumnya Jika Sudah Berjalan
+if _G[SCRIPT_ID] and typeof(_G[SCRIPT_ID].Cleanup) == "function" then
+	pcall(function() _G[SCRIPT_ID].Cleanup() end)
+end
+
+--// Services
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+
+-- Core Storage
+local ScriptState = {
+	Connections = {},
+	activeHighlights = {},
+	activeBillboards = {},
+	trackedModels = {}, -- Menyiapkan tracker untuk cleanup tiap model
+	espEnabled = false
+}
+
+----------------------------------------------------------------
+--// FUNSI CLEANUP TOTAL (Bisa di-Execute Berulang Kali)
+----------------------------------------------------------------
+function ScriptState.Cleanup()
+	for _, conn in ipairs(ScriptState.Connections) do
+		if conn and conn.Connected then
+			pcall(function() conn:Disconnect() end)
+		end
+	end
+	table.clear(ScriptState.Connections)
+
+	for model, _ in pairs(ScriptState.trackedModels) do
+		if ScriptState.trackedModels[model] then
+			for _, conn in ipairs(ScriptState.trackedModels[model]) do
+				pcall(function() conn:Disconnect() end)
+			end
+		end
+	end
+	table.clear(ScriptState.trackedModels)
+
+	for _, highlight in pairs(ScriptState.activeHighlights) do
+		if highlight and highlight.Parent then
+			pcall(function() highlight:Destroy() end)
+		end
+	end
+	table.clear(ScriptState.activeHighlights)
+
+	for _, billboardData in pairs(ScriptState.activeBillboards) do
+		if billboardData and billboardData.Gui and billboardData.Gui.Parent then
+			pcall(function() billboardData.Gui:Destroy() end)
+		end
+	end
+	table.clear(ScriptState.activeBillboards)
+
+	local oldGui = playerGui:FindFirstChild("ESPRitualGui")
+	if oldGui then
+		oldGui:Destroy()
+	end
+end
+
+_G[SCRIPT_ID] = ScriptState
+
+----------------------------------------------------------------
+--// 1. MEMBUAT UI (Dark Mode Glassmorphism)
+----------------------------------------------------------------
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "ESPRitualGui"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = playerGui
+
+-- Main Frame
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "ESPController"
+mainFrame.Size = UDim2.new(0, 220, 0, 130)
+mainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+mainFrame.BackgroundTransparency = 0.25
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Draggable = true
+mainFrame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 10)
+uiCorner.Parent = mainFrame
+
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(80, 80, 100)
+uiStroke.Thickness = 1.5
+uiStroke.Parent = mainFrame
+
+-- Title Bar
+local titleBar = Instance.new("Frame")
+titleBar.Name = "TitleBar"
+titleBar.Size = UDim2.new(1, 0, 0, 35)
+titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
+titleBar.BackgroundTransparency = 0.4
+titleBar.BorderSizePixel = 0
+titleBar.Parent = mainFrame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 10)
+titleCorner.Parent = titleBar
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, -70, 1, 0)
+titleText.Position = UDim2.new(0, 12, 0, 0)
+titleText.BackgroundTransparency = 1
+titleText.Font = Enum.Font.GothamBold
+titleText.Text = "Ritual ESP (Yin/Yang)"
+titleText.TextColor3 = Color3.fromRGB(240, 240, 255)
+titleText.TextSize = 13
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = titleBar
+
+-- Minimize Button (-)
+local minBtn = Instance.new("TextButton")
+minBtn.Size = UDim2.new(0, 25, 0, 25)
+minBtn.Position = UDim2.new(1, -30, 0, 5)
+minBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 65)
+minBtn.Font = Enum.Font.GothamBold
+minBtn.Text = "-"
+minBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minBtn.TextSize = 14
+minBtn.Parent = titleBar
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minBtn
+
+-- Content Frame
+local contentFrame = Instance.new("Frame")
+contentFrame.Name = "Content"
+contentFrame.Size = UDim2.new(1, 0, 1, -35)
+contentFrame.Position = UDim2.new(0, 0, 0, 35)
+contentFrame.BackgroundTransparency = 1
+contentFrame.Parent = mainFrame
+
+-- Toggle ESP Button
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 40)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Text = "ESP: OFF"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+toggleBtn.TextSize = 14
+toggleBtn.Parent = contentFrame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 8)
+btnCorner.Parent = toggleBtn
+
+local btnStroke = Instance.new("UIStroke")
+btnStroke.Color = Color3.fromRGB(80, 80, 100)
+btnStroke.Thickness = 1
+btnStroke.Parent = toggleBtn
+
+-- Resize Handle
+local resizeHandle = Instance.new("TextButton")
+resizeHandle.Size = UDim2.new(0, 20, 0, 20)
+resizeHandle.Position = UDim2.new(1, -20, 1, -20)
+resizeHandle.BackgroundTransparency = 1
+resizeHandle.Text = "◢"
+resizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
+resizeHandle.TextSize = 14
+resizeHandle.Parent = mainFrame
+
+----------------------------------------------------------------
+--// 2. INTERAKSI UI (Minimize & Resize Touch/Mouse)
+----------------------------------------------------------------
+local isMinimized = false
+table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function()
+	isMinimized = not isMinimized
+	contentFrame.Visible = not isMinimized
+	if isMinimized then
+		mainFrame.Size = UDim2.new(0, 220, 0, 35)
+		minBtn.Text = "+"
+		resizeHandle.Visible = false
+	else
+		mainFrame.Size = UDim2.new(0, 220, 0, 130)
+		minBtn.Text = "-"
+		resizeHandle.Visible = true
+	end
+end))
+
+local draggingResize = false
+local startMousePos, startSize
+
+table.insert(ScriptState.Connections, resizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingResize = true
+		startMousePos = input.Position
+		startSize = mainFrame.AbsoluteSize
+	end
+end))
+
+table.insert(ScriptState.Connections, UserInputService.InputChanged:Connect(function(input)
+	if draggingResize and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - startMousePos
+		local newX = math.clamp(startSize.X + delta.X, 180, 400)
+		local newY = math.clamp(startSize.Y + delta.Y, 100, 300)
+		mainFrame.Size = UDim2.new(0, newX, 0, newY)
+	end
+end))
+
+table.insert(ScriptState.Connections, UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingResize = false
+	end
+end))
+
+----------------------------------------------------------------
+--// 3. LOGIKA ESP & AUTO-REFRESH SENSING
+----------------------------------------------------------------
+local function getRuntimeFolder()
+	local ritual = Workspace:FindFirstChild("HeadlessRitual")
+	if ritual then
+		return ritual:FindFirstChild("Runtime")
+	end
+	return nil
+end
+
+local function removeESP(model)
+	if ScriptState.activeHighlights[model] then
+		pcall(function() ScriptState.activeHighlights[model]:Destroy() end)
+		ScriptState.activeHighlights[model] = nil
+	end
+	if ScriptState.activeBillboards[model] then
+		pcall(function() ScriptState.activeBillboards[model].Gui:Destroy() end)
+		ScriptState.activeBillboards[model] = nil
+	end
+	if ScriptState.trackedModels[model] then
+		for _, conn in ipairs(ScriptState.trackedModels[model]) do
+			pcall(function() conn:Disconnect() end)
+		end
+		ScriptState.trackedModels[model] = nil
+	end
+end
+
+local function clearAllESP()
+	for model, _ in pairs(ScriptState.activeHighlights) do
+		removeESP(model)
+	end
+end
+
+local function createESP(model)
+	if not model or not model:IsA("Model") then return end
+	if ScriptState.activeHighlights[model] then return end
+
+	local modelName = model.Name
+	local espColor = Color3.fromRGB(255, 255, 255)
+	
+	if modelName == "Yin" then
+		espColor = Color3.fromRGB(100, 180, 255)
+	elseif modelName == "Yang" then
+		espColor = Color3.fromRGB(255, 200, 50)
+	else
+		return
+	end
+
+	-- Highlight (Outline 3D)
+	local highlight = Instance.new("Highlight")
+	highlight.Name = "ESPHighlight"
+	highlight.Adornee = model
+	highlight.FillColor = espColor
+	highlight.FillTransparency = 0.5
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.OutlineTransparency = 0
+	highlight.Parent = model
+	ScriptState.activeHighlights[model] = highlight
+
+	-- BillboardGui (Teks & Jarak)
+	local billboard = Instance.new("BillboardGui")
+	billboard.Name = "ESPBillboard"
+	billboard.Adornee = model:FindFirstChildWhichIsA("BasePart") or model
+	billboard.Size = UDim2.new(0, 120, 0, 40)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.Font = Enum.Font.GothamBold
+	textLabel.TextSize = 14
+	textLabel.TextColor3 = espColor
+	textLabel.TextStrokeTransparency = 0.3
+	textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+	textLabel.Parent = billboard
+
+	billboard.Parent = model
+	ScriptState.activeBillboards[model] = {Gui = billboard, Text = textLabel, Model = model}
+
+	-- Deteksi jika model berpindah parent / Diambil / Destroyed
+	ScriptState.trackedModels[model] = {}
+	
+	local connAncestry = model.AncestryChanged:Connect(function(_, parent)
+		local runtimeFolder = getRuntimeFolder()
+		if not parent or (runtimeFolder and not model:IsDescendantOf(runtimeFolder)) then
+			removeESP(model)
+		end
+	end)
+	
+	local connDestroying = model.Destroying:Connect(function()
+		removeESP(model)
+	end)
+
+	table.insert(ScriptState.trackedModels[model], connAncestry)
+	table.insert(ScriptState.trackedModels[model], connDestroying)
+end
+
+-- Scan ulang semua model yang berada di folder Runtime saat ini
+local function scanRuntime()
+	if not ScriptState.espEnabled then return end
+	local runtimeFolder = getRuntimeFolder()
+	if not runtimeFolder then return end
+	
+	for _, child in ipairs(runtimeFolder:GetChildren()) do
+		if child.Name == "Yin" or child.Name == "Yang" then
+			createESP(child)
+		end
+	end
+end
+
+-- Monitor Folder Runtime untuk Spawn / Despawn
+task.spawn(function()
+	local activeThread = true
+	table.insert(ScriptState.Connections, {
+		Connected = true,
+		Disconnect = function() activeThread = false end
+	})
+
+	while activeThread do
+		task.wait(0.5)
+		local runtimeFolder = getRuntimeFolder()
+		if runtimeFolder and not runtimeFolder:FindFirstChild("_Connected_" .. SCRIPT_ID) then
+			local marker = Instance.new("Folder")
+			marker.Name = "_Connected_" .. SCRIPT_ID
+			marker.Parent = runtimeFolder
+
+			-- Ketika model baru spawn
+			table.insert(ScriptState.Connections, runtimeFolder.ChildAdded:Connect(function(child)
+				if ScriptState.espEnabled then
+					task.wait(0.1) -- Delay kecil agar parts di dalam model sempat loaded
+					if child.Name == "Yin" or child.Name == "Yang" then
+						createESP(child)
+					end
+				end
+			end))
+
+			-- Ketika model dihapus/diambil dari Runtime
+			table.insert(ScriptState.Connections, runtimeFolder.ChildRemoved:Connect(function(child)
+				removeESP(child)
+			end))
+			
+			-- Jika ESP dalam posisi ON saat folder Runtime baru terhubung, langsung scan
+			if ScriptState.espEnabled then
+				scanRuntime()
+			end
+		end
+	end
+end)
+
+-- Toggle Button Click Action
+table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(function()
+	ScriptState.espEnabled = not ScriptState.espEnabled
+	if ScriptState.espEnabled then
+		toggleBtn.Text = "ESP: ON"
+		toggleBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+		scanRuntime()
+	else
+		toggleBtn.Text = "ESP: OFF"
+		toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+		clearAllESP()
+	end
+end))
+
+-- RenderStepped Update Distance & Real-Time Sanity Check
+table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
+	if not ScriptState.espEnabled then return end
+	local char = player.Character
+	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+
+	for model, data in pairs(ScriptState.activeBillboards) do
+		local runtimeFolder = getRuntimeFolder()
+		-- Jika model sudah tidak valid atau tidak di folder Runtime lagi, hapus ESP
+		if not model or not model.Parent or (runtimeFolder and not model:IsDescendantOf(runtimeFolder)) then
+			removeESP(model)
+		elseif rootPart then
+			local targetPart = model:FindFirstChildWhichIsA("BasePart")
+			if targetPart then
+				local distance = math.floor((targetPart.Position - rootPart.Position).Magnitude)
+				data.Text.Text = "[" .. model.Name .. "]\n[" .. distance .. "m]"
+			end
+		end
+	end
+end))
