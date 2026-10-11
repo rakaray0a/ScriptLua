@@ -40,9 +40,10 @@ local ScriptState = {
 	espEnabled = false,
 	autoCollectEnabled = false,
 	spawnedStatus = { Yin = false, Yang = false },
-	collectedCount = 0, -- Menghitung jumlah item (Yin/Yang) yang diproses
+	collectedCount = 0,
 	lastTargetModel = nil,
-	isRitualInProgress = false
+	isRitualInProgress = false,
+	isEggPriorityActive = false -- Flag interupsi untuk Headless Egg
 }
 
 ----------------------------------------------------------------
@@ -88,7 +89,75 @@ end
 _G[SCRIPT_ID] = ScriptState
 
 ----------------------------------------------------------------
---// FUNGSI CUSTOM DRAGGABLE
+--// FUNGSI TELEPORT & PROXIMITY PROMPT
+----------------------------------------------------------------
+local function safeTeleport(cframe)
+	local char = player.Character
+	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+	if rootPart then
+		rootPart.CFrame = cframe
+		pcall(function()
+			local tween = TweenService:Create(rootPart, TweenInfo.new(0.1, Enum.EasingStyle.Linear), {CFrame = cframe})
+			tween:Play()
+		end)
+	end
+end
+
+local function firePromptCustom(prompt)
+	if not prompt then return end
+	pcall(function()
+		if fireproximityprompt then
+			fireproximityprompt(prompt, 0)
+			fireproximityprompt(prompt, prompt.HoldDuration or 0)
+		end
+		prompt:InputHoldBegin()
+		local duration = prompt.HoldDuration > 0 and prompt.HoldDuration or 0.2
+		task.wait(duration + 0.05)
+		prompt:InputHoldEnd()
+		if prompt.Enabled then prompt:Trigger() end
+	end)
+end
+
+local function triggerAutoPickup(model)
+	if not model then return end
+	for _, desc in ipairs(model:GetDescendants()) do
+		if desc:IsA("ProximityPrompt") then
+			firePromptCustom(desc)
+		end
+	end
+end
+
+----------------------------------------------------------------
+--// PRIORITAS UTAMA: GLOBAL HEADLESS EGG PICKUP
+----------------------------------------------------------------
+local function processHeadlessEgg(eggInstance)
+	if not ScriptState.autoCollectEnabled or not eggInstance or not eggInstance.Parent then return end
+	
+	ScriptState.isEggPriorityActive = true
+	task.spawn(function()
+		statusTextLabel.Text = "🚨 PRIORITY: Headless Egg Spawned!"
+		local part = eggInstance:IsA("BasePart") and eggInstance or eggInstance:FindFirstChildWhichIsA("BasePart", true)
+		
+		if part then
+			-- Teleport ke lokasi Headless Egg
+			safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
+			ScriptState.lastTargetModel = part
+			
+			-- Tahan Proximity secara intensif sampai terambil
+			for i = 1, 12 do
+				if not eggInstance or not eggInstance.Parent then break end
+				triggerAutoPickup(eggInstance)
+				task.wait(0.15)
+			end
+		end
+		
+		ScriptState.isEggPriorityActive = false
+		statusTextLabel.Text = "✅ Headless Egg Picked Up!"
+	end)
+end
+
+----------------------------------------------------------------
+--// FUNGSI CUSTOM DRAGGABLE UI
 ----------------------------------------------------------------
 local function makeDraggable(topBar, mainFrame)
 	local dragging = false
@@ -136,7 +205,7 @@ screenGui.DisplayOrder = 999999999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = parentContainer
 
--- Panel Kontrol Utama
+-- Panel Kontrol
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "ESPController"
 mainFrame.Size = UDim2.new(0, 220, 0, 180)
@@ -396,47 +465,8 @@ table.insert(ScriptState.Connections, UserInputService.InputEnded:Connect(functi
 end))
 
 ----------------------------------------------------------------
---// 3. FUNGSI PEMICU PROXIMITYPROMPT MULTI-METHOD
+--// 3. LOGIKA SEKUENSIL RITUAL (SEAL -> REWARDS/CANDY -> DROPOFF)
 ----------------------------------------------------------------
-local function firePromptCustom(prompt)
-	if not prompt then return end
-	pcall(function()
-		if fireproximityprompt then
-			fireproximityprompt(prompt, 0)
-			fireproximityprompt(prompt, prompt.HoldDuration or 0)
-		end
-		prompt:InputHoldBegin()
-		local duration = prompt.HoldDuration > 0 and prompt.HoldDuration or 0.2
-		task.wait(duration + 0.05)
-		prompt:InputHoldEnd()
-		if prompt.Enabled then prompt:Trigger() end
-	end)
-end
-
-local function triggerAutoPickup(model)
-	if not model then return end
-	for _, desc in ipairs(model:GetDescendants()) do
-		if desc:IsA("ProximityPrompt") then
-			firePromptCustom(desc)
-		end
-	end
-end
-
-----------------------------------------------------------------
---// 4. LOGIKA SEKUENSIL RITUAL (SEAL -> REWARDS -> DROPOFF -> LOOP)
-----------------------------------------------------------------
-local function safeTeleport(cframe)
-	local char = player.Character
-	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
-	if rootPart then
-		rootPart.CFrame = cframe
-		pcall(function()
-			local tween = TweenService:Create(rootPart, TweenInfo.new(0.1, Enum.EasingStyle.Linear), {CFrame = cframe})
-			tween:Play()
-		end)
-	end
-end
-
 local function processSealAndRewards()
 	if ScriptState.isRitualInProgress then return end
 	ScriptState.isRitualInProgress = true
@@ -450,12 +480,12 @@ local function processSealAndRewards()
 			local sealPart = sealModel:FindFirstChildWhichIsA("BasePart", true) or sealModel
 			local targetCFrame = (sealPart:IsA("BasePart") and sealPart.CFrame or CFrame.new()) * CFrame.new(0, 1, 3)
 			
-			-- 1. Teleport ke Model Seal
+			-- 1. Teleport ke Model Seal & Lock Kamera
 			safeTeleport(targetCFrame)
 			ScriptState.lastTargetModel = sealPart
 			task.wait(0.5)
 
-			-- 2. Mencari & Menekan KEDUA input di Seal secara bergantian satu per satu
+			-- 2. Menekan KEDUA input di Seal secara 1 per 1 (Place Yin & Place Yang)
 			statusTextLabel.Text = "⚡ Meletakkan Yin & Yang di Seal (1 per 1)..."
 			local sealPrompts = {}
 			for _, desc in ipairs(sealModel:GetDescendants()) do
@@ -464,55 +494,47 @@ local function processSealAndRewards()
 				end
 			end
 
-			-- Eksekusi satu per satu dengan jeda aman agar tidak berbenturan
 			for _, prompt in ipairs(sealPrompts) do
 				firePromptCustom(prompt)
-				task.wait(1.5) -- Jeda aman untuk menekan input berikutnya
+				task.wait(1.5)
 			end
 
-			task.wait(1)
+			task.wait(0.5)
 
-			-- 3. Teleport langsung ke Folder yang Mengandung kata "Rewards" di Runtime
-			local runtimeFolder = headlessRitual:FindFirstChild("Runtime")
-			if runtimeFolder then
-				local rewardsFolder = nil
-				-- Tunggu sebentar sampai folder Rewards dimuat oleh game
-				for i = 1, 10 do
-					for _, child in ipairs(runtimeFolder:GetChildren()) do
-						if child:IsA("Folder") and string.find(child.Name, "Rewards") then
-							rewardsFolder = child
-							break
+			-- 3. Teleport langsung ke Dropped Candy / Rewards Folder di Workspace
+			statusTextLabel.Text = "🎁 Teleport ke Rewards / Candy..."
+			local foundItems = {}
+
+			-- Cari folder HalloweenCandy atau Runtime yang berisi DroppedCandy / Rewards
+			local searchFolders = {
+				Workspace:FindFirstChild("HalloweenCandy"),
+				headlessRitual and headlessRitual:FindFirstChild("Runtime")
+			}
+
+			for _, folder in ipairs(searchFolders) do
+				if folder then
+					for _, child in ipairs(folder:GetChildren()) do
+						if string.find(child.Name, "Candy") or string.find(child.Name, "Rewards") or string.find(child.Name, "Dropped") then
+							table.insert(foundItems, child)
 						end
 					end
-					if rewardsFolder then break end
-					task.wait(0.3)
 				end
+			end
 
-				if rewardsFolder then
-					statusTextLabel.Text = "🎁 Auto-Pickup Rewards di Goa..."
-					
-					-- Kumpulkan seluruh item di folder Rewards
-					local itemsToCollect = {}
-					for _, child in ipairs(rewardsFolder:GetChildren()) do
-						table.insert(itemsToCollect, child)
-					end
-
-					-- Teleport dan tekan prompt pada setiap item reward secara berurutan
-					for _, item in ipairs(itemsToCollect) do
-						local part = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
-						if part then
-							safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
-							ScriptState.lastTargetModel = part
-							task.wait(0.2)
-						end
-						triggerAutoPickup(item)
-						task.wait(0.6)
-					end
+			-- Teleport ke setiap item reward & auto-pickup
+			for _, item in ipairs(foundItems) do
+				local part = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
+				if part then
+					safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
+					ScriptState.lastTargetModel = part
+					task.wait(0.2)
 				end
+				triggerAutoPickup(item)
+				task.wait(0.5)
 			end
 
 			-- 4. Teleport ke Workspace.CandyDropOff.Pad
-			statusTextLabel.Text = "🏃 Teleporting ke Candy DropOff..."
+			statusTextLabel.Text = "🏃 Teleporting ke Candy DropOff Pad..."
 			local dropOff = Workspace:FindFirstChild("CandyDropOff")
 			local pad = dropOff and dropOff:FindFirstChild("Pad")
 			if pad then
@@ -524,7 +546,7 @@ local function processSealAndRewards()
 			end
 		end
 
-		-- Reset Status untuk Looping Berikutnya
+		-- Reset Status untuk Looping
 		ScriptState.collectedCount = 0
 		ScriptState.lastTargetModel = nil
 		ScriptState.isRitualInProgress = false
@@ -532,10 +554,10 @@ local function processSealAndRewards()
 end
 
 ----------------------------------------------------------------
---// 5. LOGIKA ESP & AUTO-TELEPORT (SKIP IF FAIL -> TELEPORT TO SEAL)
+--// 4. LOGIKA ESP & AUTO-TELEPORT (YIN & YANG)
 ----------------------------------------------------------------
 local function performAutoTeleport(model)
-	if not ScriptState.autoCollectEnabled or ScriptState.isRitualInProgress then return end
+	if not ScriptState.autoCollectEnabled or ScriptState.isRitualInProgress or ScriptState.isEggPriorityActive then return end
 	if not model or not model.Parent then return end
 
 	task.spawn(function()
@@ -554,7 +576,6 @@ local function performAutoTeleport(model)
 			ScriptState.lastTargetModel = targetPart
 
 			local pickedUpSuccess = false
-			-- Coba pickup beberapa kali
 			for i = 1, 6 do
 				if not model or not model.Parent then 
 					pickedUpSuccess = true
@@ -564,10 +585,9 @@ local function performAutoTeleport(model)
 				task.wait(0.15)
 			end
 
-			-- Jika item berhasil hilang (ter-pickup) atau gagal (tidak bisa dipickup), tambah counter
 			ScriptState.collectedCount = ScriptState.collectedCount + 1
 
-			-- Jika sudah memproses 2 item (Yin & Yang) atau item terakhir di map, langsung teleport ke Seal
+			-- Teleport ke Seal setelah 2 item terproses atau jika item dilewati
 			if ScriptState.collectedCount >= 2 or not pickedUpSuccess then
 				processSealAndRewards()
 			end
@@ -579,7 +599,7 @@ local function updateNotificationText()
 	local yinStatus = ScriptState.spawnedStatus.Yin and "🟢 SPAWN" or "🔴 BELUM ADA"
 	local yangStatus = ScriptState.spawnedStatus.Yang and "🟢 SPAWN" or "🔴 BELUM ADA"
 	
-	if not ScriptState.isRitualInProgress then
+	if not ScriptState.isRitualInProgress and not ScriptState.isEggPriorityActive then
 		statusTextLabel.Text = string.format("☯️ STATUS RITUAL:\n• Yin: %s\n• Yang: %s", yinStatus, yangStatus)
 	end
 end
@@ -697,7 +717,24 @@ local function scanRuntime()
 	checkStatusRealtime()
 end
 
--- Monitor Runtime Loop (Mendeteksi Spawn/Despawn berulang)
+----------------------------------------------------------------
+--// 5. GLOBAL WORKSPACE MONITOR (TERMASUK HEADLESS EGG DETECTOR)
+----------------------------------------------------------------
+-- Scan Awal untuk Headless Egg di Seluruh Workspace
+for _, desc in ipairs(Workspace:GetDescendants()) do
+	if string.find(string.lower(desc.Name), "headless egg") then
+		processHeadlessEgg(desc)
+	end
+end
+
+-- Monitor Objek Baru di Seluruh Workspace
+table.insert(ScriptState.Connections, Workspace.DescendantAdded:Connect(function(desc)
+	if string.find(string.lower(desc.Name), "headless egg") then
+		processHeadlessEgg(desc)
+	end
+end))
+
+-- Monitor Specific Runtime Folder untuk Yin/Yang
 task.spawn(function()
 	local activeThread = true
 	table.insert(ScriptState.Connections, {
@@ -736,7 +773,7 @@ task.spawn(function()
 	end
 end)
 
--- Listener Global PromptShown
+-- Listener Global ProximityPrompt
 table.insert(ScriptState.Connections, ProximityPromptService.PromptShown:Connect(function(prompt)
 	if ScriptState.autoCollectEnabled then
 		firePromptCustom(prompt)
@@ -771,12 +808,12 @@ table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function
 	end
 end))
 
--- RenderStepped Distance & Camera Lock
+-- RenderStepped Update Distance & Camera Lock
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
 
-	-- Camera Lock ke arah target aktif (Item/Seal/Rewards)
+	-- Camera Lock ke arah target aktif (Telur/Yin-Yang/Seal/Rewards)
 	if ScriptState.autoCollectEnabled and ScriptState.lastTargetModel and ScriptState.lastTargetModel.Parent then
 		pcall(function()
 			local targetPos = ScriptState.lastTargetModel.Position
