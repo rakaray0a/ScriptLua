@@ -20,12 +20,13 @@ local ScriptState = {
 	Connections = {},
 	activeHighlights = {},
 	activeBillboards = {},
-	trackedModels = {}, -- Menyiapkan tracker untuk cleanup tiap model
-	espEnabled = false
+	trackedModels = {},
+	espEnabled = false,
+	spawnedStatus = { Yin = false, Yang = false }
 }
 
 ----------------------------------------------------------------
---// FUNSI CLEANUP TOTAL (Bisa di-Execute Berulang Kali)
+--// FUNSI CLEANUP TOTAL
 ----------------------------------------------------------------
 function ScriptState.Cleanup()
 	for _, conn in ipairs(ScriptState.Connections) do
@@ -67,7 +68,7 @@ end
 _G[SCRIPT_ID] = ScriptState
 
 ----------------------------------------------------------------
---// 1. MEMBUAT UI (Dark Mode Glassmorphism)
+--// 1. MEMBUAT UI (Panel Kontrol ESP & Panel Notifikasi Spawn)
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ESPRitualGui"
@@ -75,11 +76,11 @@ screenGui.ResetOnSpawn = false
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = playerGui
 
--- Main Frame
+-- A. Panel Kontrol Utama ESP (Kiri Atas)
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "ESPController"
 mainFrame.Size = UDim2.new(0, 220, 0, 130)
-mainFrame.Position = UDim2.new(0.1, 0, 0.2, 0)
+mainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 mainFrame.BackgroundTransparency = 0.25
 mainFrame.BorderSizePixel = 0
@@ -96,7 +97,6 @@ uiStroke.Color = Color3.fromRGB(80, 80, 100)
 uiStroke.Thickness = 1.5
 uiStroke.Parent = mainFrame
 
--- Title Bar
 local titleBar = Instance.new("Frame")
 titleBar.Name = "TitleBar"
 titleBar.Size = UDim2.new(1, 0, 0, 35)
@@ -120,7 +120,6 @@ titleText.TextSize = 13
 titleText.TextXAlignment = Enum.TextXAlignment.Left
 titleText.Parent = titleBar
 
--- Minimize Button (-)
 local minBtn = Instance.new("TextButton")
 minBtn.Size = UDim2.new(0, 25, 0, 25)
 minBtn.Position = UDim2.new(1, -30, 0, 5)
@@ -135,7 +134,6 @@ local minCorner = Instance.new("UICorner")
 minCorner.CornerRadius = UDim.new(0, 6)
 minCorner.Parent = minBtn
 
--- Content Frame
 local contentFrame = Instance.new("Frame")
 contentFrame.Name = "Content"
 contentFrame.Size = UDim2.new(1, 0, 1, -35)
@@ -143,7 +141,6 @@ contentFrame.Position = UDim2.new(0, 0, 0, 35)
 contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
--- Toggle ESP Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0.9, 0, 0, 40)
 toggleBtn.Position = UDim2.new(0.05, 0, 0.2, 0)
@@ -163,7 +160,6 @@ btnStroke.Color = Color3.fromRGB(80, 80, 100)
 btnStroke.Thickness = 1
 btnStroke.Parent = toggleBtn
 
--- Resize Handle
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Size = UDim2.new(0, 20, 0, 20)
 resizeHandle.Position = UDim2.new(1, -20, 1, -20)
@@ -173,14 +169,104 @@ resizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
+
+-- B. Panel Notifikasi Spawn (Bisa Digeser, Resize, & Minimize di Atas Tengah)
+local notifFrame = Instance.new("Frame")
+notifFrame.Name = "SpawnNotifierPanel"
+notifFrame.Size = UDim2.new(0, 280, 0, 110)
+notifFrame.Position = UDim2.new(0.5, -140, 0.05, 0)
+notifFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
+notifFrame.BackgroundTransparency = 0.25
+notifFrame.BorderSizePixel = 0
+notifFrame.Active = true
+notifFrame.Draggable = true
+notifFrame.Parent = screenGui
+
+local notifCorner = Instance.new("UICorner")
+notifCorner.CornerRadius = UDim.new(0, 10)
+notifCorner.Parent = notifFrame
+
+local notifStroke = Instance.new("UIStroke")
+notifStroke.Color = Color3.fromRGB(100, 80, 150)
+notifStroke.Thickness = 1.5
+notifStroke.Parent = notifFrame
+
+local notifTitleBar = Instance.new("Frame")
+notifTitleBar.Name = "TitleBar"
+notifTitleBar.Size = UDim2.new(1, 0, 0, 30)
+notifTitleBar.BackgroundColor3 = Color3.fromRGB(40, 30, 50)
+notifTitleBar.BackgroundTransparency = 0.4
+notifTitleBar.BorderSizePixel = 0
+notifTitleBar.Parent = notifFrame
+
+local notifTitleCorner = Instance.new("UICorner")
+notifTitleCorner.CornerRadius = UDim.new(0, 10)
+notifTitleCorner.Parent = notifTitleBar
+
+local notifTitleText = Instance.new("TextLabel")
+notifTitleText.Size = UDim2.new(1, -50, 1, 0)
+notifTitleText.Position = UDim2.new(0, 10, 0, 0)
+notifTitleText.BackgroundTransparency = 1
+notifTitleText.Font = Enum.Font.GothamBold
+notifTitleText.Text = "📢 Status Spawn Ritual"
+notifTitleText.TextColor3 = Color3.fromRGB(255, 220, 100)
+notifTitleText.TextSize = 12
+notifTitleText.TextXAlignment = Enum.TextXAlignment.Left
+notifTitleText.Parent = notifTitleBar
+
+local notifMinBtn = Instance.new("TextButton")
+notifMinBtn.Size = UDim2.new(0, 22, 0, 22)
+notifMinBtn.Position = UDim2.new(1, -26, 0, 4)
+notifMinBtn.BackgroundColor3 = Color3.fromRGB(60, 50, 75)
+notifMinBtn.Font = Enum.Font.GothamBold
+notifMinBtn.Text = "-"
+notifMinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+notifMinBtn.TextSize = 12
+notifMinBtn.Parent = notifTitleBar
+
+local notifMinCorner = Instance.new("UICorner")
+notifMinCorner.CornerRadius = UDim.new(0, 5)
+notifMinCorner.Parent = notifMinBtn
+
+local notifContent = Instance.new("Frame")
+notifContent.Name = "Content"
+notifContent.Size = UDim2.new(1, 0, 1, -30)
+notifContent.Position = UDim2.new(0, 0, 0, 30)
+notifContent.BackgroundTransparency = 1
+notifContent.Parent = notifFrame
+
+-- Label Status Teks Notifikasi Yin & Yang
+local statusTextLabel = Instance.new("TextLabel")
+statusTextLabel.Size = UDim2.new(1, -16, 1, -10)
+statusTextLabel.Position = UDim2.new(0, 8, 0, 5)
+statusTextLabel.BackgroundTransparency = 1
+statusTextLabel.Font = Enum.Font.GothamSemibold
+statusTextLabel.Text = "⏳ Menunggu Yin & Yang Spawn..."
+statusTextLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+statusTextLabel.TextSize = 13
+statusTextLabel.TextWrapped = true
+statusTextLabel.TextXAlignment = Enum.TextXAlignment.Center
+statusTextLabel.TextYAlignment = Enum.TextYAlignment.Center
+statusTextLabel.Parent = notifContent
+
+local notifResizeHandle = Instance.new("TextButton")
+notifResizeHandle.Size = UDim2.new(0, 18, 0, 18)
+notifResizeHandle.Position = UDim2.new(1, -18, 1, -18)
+notifResizeHandle.BackgroundTransparency = 1
+notifResizeHandle.Text = "◢"
+notifResizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
+notifResizeHandle.TextSize = 12
+notifResizeHandle.Parent = notifFrame
+
 ----------------------------------------------------------------
---// 2. INTERAKSI UI (Minimize & Resize Touch/Mouse)
+--// 2. LOGIKA INTERAKSI UI (Minimize & Resize untuk Kedua Panel)
 ----------------------------------------------------------------
-local isMinimized = false
+-- Minimize Panel Kontrol ESP
+local isMinimizedESP = false
 table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function()
-	isMinimized = not isMinimized
-	contentFrame.Visible = not isMinimized
-	if isMinimized then
+	isMinimizedESP = not isMinimizedESP
+	contentFrame.Visible = not isMinimizedESP
+	if isMinimizedESP then
 		mainFrame.Size = UDim2.new(0, 220, 0, 35)
 		minBtn.Text = "+"
 		resizeHandle.Visible = false
@@ -191,34 +277,61 @@ table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function(
 	end
 end))
 
-local draggingResize = false
-local startMousePos, startSize
+-- Minimize Panel Notifikasi
+local isMinimizedNotif = false
+table.insert(ScriptState.Connections, notifMinBtn.MouseButton1Click:Connect(function()
+	isMinimizedNotif = not isMinimizedNotif
+	notifContent.Visible = not isMinimizedNotif
+	if isMinimizedNotif then
+		notifFrame.Size = UDim2.new(0, 280, 0, 30)
+		notifMinBtn.Text = "+"
+		notifResizeHandle.Visible = false
+	else
+		notifFrame.Size = UDim2.new(0, 280, 0, 110)
+		notifMinBtn.Text = "-"
+		notifResizeHandle.Visible = true
+	end
+end))
 
-table.insert(ScriptState.Connections, resizeHandle.InputBegan:Connect(function(input)
+-- Resize Handler untuk Panel Notifikasi
+local draggingResizeNotif = false
+local startMousePosNotif, startSizeNotif
+
+table.insert(ScriptState.Connections, notifResizeHandle.InputBegan:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingResize = true
-		startMousePos = input.Position
-		startSize = mainFrame.AbsoluteSize
+		draggingResizeNotif = true
+		startMousePosNotif = input.Position
+		startSizeNotif = notifFrame.AbsoluteSize
 	end
 end))
 
 table.insert(ScriptState.Connections, UserInputService.InputChanged:Connect(function(input)
-	if draggingResize and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - startMousePos
-		local newX = math.clamp(startSize.X + delta.X, 180, 400)
-		local newY = math.clamp(startSize.Y + delta.Y, 100, 300)
-		mainFrame.Size = UDim2.new(0, newX, 0, newY)
+	if draggingResizeNotif and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - startMousePosNotif
+		local newX = math.clamp(startSizeNotif.X + delta.X, 220, 450)
+		local newY = math.clamp(startSizeNotif.Y + delta.Y, 70, 250)
+		notifFrame.Size = UDim2.new(0, newX, 0, newY)
 	end
 end))
 
 table.insert(ScriptState.Connections, UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		draggingResize = false
+		draggingResizeNotif = false
 	end
 end))
 
 ----------------------------------------------------------------
---// 3. LOGIKA ESP & AUTO-REFRESH SENSING
+--// 3. UPDATE TEKS NOTIFIKASI SPAWN SECARA REAL-TIME
+----------------------------------------------------------------
+local function updateNotificationText()
+	local yinStatus = ScriptState.spawnedStatus.Yin and "🟢 SPAWN (ADA)" or "🔴 BELUM ADA"
+	local yangStatus = ScriptState.spawnedStatus.Yang and "🟢 SPAWN (ADA)" or "🔴 BELUM ADA"
+	
+	statusTextLabel.Text = string.format("☯️ STATUS MODEL RITUAL:\n• Yin: %s\n• Yang: %s", yinStatus, yangStatus)
+end
+
+----------------------------------------------------------------
+--// 4. LOGIKA ESP & AUTO-REFRESH SENSING
 ----------------------------------------------------------------
 local function getRuntimeFolder()
 	local ritual = Workspace:FindFirstChild("HeadlessRitual")
@@ -226,6 +339,22 @@ local function getRuntimeFolder()
 		return ritual:FindFirstChild("Runtime")
 	end
 	return nil
+end
+
+local function checkStatusRealtime()
+	local runtimeFolder = getRuntimeFolder()
+	local hasYin, hasYang = false, false
+	
+	if runtimeFolder then
+		for _, child in ipairs(runtimeFolder:GetChildren()) do
+			if child.Name == "Yin" then hasYin = true end
+			if child.Name == "Yang" then hasYang = true end
+		end
+	end
+	
+	ScriptState.spawnedStatus.Yin = hasYin
+	ScriptState.spawnedStatus.Yang = hasYang
+	updateNotificationText()
 end
 
 local function removeESP(model)
@@ -243,6 +372,7 @@ local function removeESP(model)
 		end
 		ScriptState.trackedModels[model] = nil
 	end
+	checkStatusRealtime()
 end
 
 local function clearAllESP()
@@ -298,7 +428,7 @@ local function createESP(model)
 	billboard.Parent = model
 	ScriptState.activeBillboards[model] = {Gui = billboard, Text = textLabel, Model = model}
 
-	-- Deteksi jika model berpindah parent / Diambil / Destroyed
+	-- Pelacakan status ketika model diambil/hilang
 	ScriptState.trackedModels[model] = {}
 	
 	local connAncestry = model.AncestryChanged:Connect(function(_, parent)
@@ -314,22 +444,25 @@ local function createESP(model)
 
 	table.insert(ScriptState.trackedModels[model], connAncestry)
 	table.insert(ScriptState.trackedModels[model], connDestroying)
+
+	checkStatusRealtime()
 end
 
--- Scan ulang semua model yang berada di folder Runtime saat ini
 local function scanRuntime()
-	if not ScriptState.espEnabled then return end
 	local runtimeFolder = getRuntimeFolder()
 	if not runtimeFolder then return end
 	
 	for _, child in ipairs(runtimeFolder:GetChildren()) do
 		if child.Name == "Yin" or child.Name == "Yang" then
-			createESP(child)
+			if ScriptState.espEnabled then
+				createESP(child)
+			end
 		end
 	end
+	checkStatusRealtime()
 end
 
--- Monitor Folder Runtime untuk Spawn / Despawn
+-- Monitor Folder Runtime untuk Spawn & Despawn Otomatis
 task.spawn(function()
 	local activeThread = true
 	table.insert(ScriptState.Connections, {
@@ -340,35 +473,32 @@ task.spawn(function()
 	while activeThread do
 		task.wait(0.5)
 		local runtimeFolder = getRuntimeFolder()
-		if runtimeFolder and not runtimeFolder:FindFirstChild("_Connected_" .. SCRIPT_ID) then
-			local marker = Instance.new("Folder")
-			marker.Name = "_Connected_" .. SCRIPT_ID
-			marker.Parent = runtimeFolder
+		if runtimeFolder then
+			checkStatusRealtime()
+			if not runtimeFolder:FindFirstChild("_Connected_" .. SCRIPT_ID) then
+				local marker = Instance.new("Folder")
+				marker.Name = "_Connected_" .. SCRIPT_ID
+				marker.Parent = runtimeFolder
 
-			-- Ketika model baru spawn
-			table.insert(ScriptState.Connections, runtimeFolder.ChildAdded:Connect(function(child)
-				if ScriptState.espEnabled then
-					task.wait(0.1) -- Delay kecil agar parts di dalam model sempat loaded
+				table.insert(ScriptState.Connections, runtimeFolder.ChildAdded:Connect(function(child)
+					task.wait(0.1)
 					if child.Name == "Yin" or child.Name == "Yang" then
-						createESP(child)
+						if ScriptState.espEnabled then
+							createESP(child)
+						end
+						checkStatusRealtime()
 					end
-				end
-			end))
+				end))
 
-			-- Ketika model dihapus/diambil dari Runtime
-			table.insert(ScriptState.Connections, runtimeFolder.ChildRemoved:Connect(function(child)
-				removeESP(child)
-			end))
-			
-			-- Jika ESP dalam posisi ON saat folder Runtime baru terhubung, langsung scan
-			if ScriptState.espEnabled then
-				scanRuntime()
+				table.insert(ScriptState.Connections, runtimeFolder.ChildRemoved:Connect(function(child)
+					removeESP(child)
+				end))
 			end
 		end
 	end
 end)
 
--- Toggle Button Click Action
+-- Toggle Button ESP
 table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(function()
 	ScriptState.espEnabled = not ScriptState.espEnabled
 	if ScriptState.espEnabled then
@@ -382,18 +512,16 @@ table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(functi
 	end
 end))
 
--- RenderStepped Update Distance & Real-Time Sanity Check
+-- Update RenderStepped Real-Time Jarak & Sanity Check
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
-	if not ScriptState.espEnabled then return end
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
 
 	for model, data in pairs(ScriptState.activeBillboards) do
 		local runtimeFolder = getRuntimeFolder()
-		-- Jika model sudah tidak valid atau tidak di folder Runtime lagi, hapus ESP
 		if not model or not model.Parent or (runtimeFolder and not model:IsDescendantOf(runtimeFolder)) then
 			removeESP(model)
-		elseif rootPart then
+		elseif ScriptState.espEnabled and rootPart then
 			local targetPart = model:FindFirstChildWhichIsA("BasePart")
 			if targetPart then
 				local distance = math.floor((targetPart.Position - rootPart.Position).Magnitude)
