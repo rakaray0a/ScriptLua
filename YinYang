@@ -43,7 +43,7 @@ local ScriptState = {
 	collectedCount = 0,
 	lastTargetModel = nil,
 	isRitualInProgress = false,
-	isEggPriorityActive = false -- Flag interupsi untuk Headless Egg
+	isEggPriorityActive = false
 }
 
 ----------------------------------------------------------------
@@ -139,11 +139,9 @@ local function processHeadlessEgg(eggInstance)
 		local part = eggInstance:IsA("BasePart") and eggInstance or eggInstance:FindFirstChildWhichIsA("BasePart", true)
 		
 		if part then
-			-- Teleport ke lokasi Headless Egg
 			safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
 			ScriptState.lastTargetModel = part
 			
-			-- Tahan Proximity secara intensif sampai terambil
 			for i = 1, 12 do
 				if not eggInstance or not eggInstance.Parent then break end
 				triggerAutoPickup(eggInstance)
@@ -465,7 +463,7 @@ table.insert(ScriptState.Connections, UserInputService.InputEnded:Connect(functi
 end))
 
 ----------------------------------------------------------------
---// 3. LOGIKA SEKUENSIL RITUAL (SEAL -> REWARDS/CANDY -> DROPOFF)
+--// 3. LOGIKA SEKUENSIL RITUAL (SEAL -> RITUAL CANDY -> DROPOFF)
 ----------------------------------------------------------------
 local function processSealAndRewards()
 	if ScriptState.isRitualInProgress then return end
@@ -501,36 +499,26 @@ local function processSealAndRewards()
 
 			task.wait(0.5)
 
-			-- 3. Teleport langsung ke Dropped Candy / Rewards Folder di Workspace
-			statusTextLabel.Text = "🎁 Teleport ke Rewards / Candy..."
-			local foundItems = {}
-
-			-- Cari folder HalloweenCandy atau Runtime yang berisi DroppedCandy / Rewards
-			local searchFolders = {
-				Workspace:FindFirstChild("HalloweenCandy"),
-				headlessRitual and headlessRitual:FindFirstChild("Runtime")
-			}
-
-			for _, folder in ipairs(searchFolders) do
-				if folder then
-					for _, child in ipairs(folder:GetChildren()) do
-						if string.find(child.Name, "Candy") or string.find(child.Name, "Rewards") or string.find(child.Name, "Dropped") then
-							table.insert(foundItems, child)
+			-- 3. Teleport HANYA ke Model Candy Dinamis di HalloweenCandy (Mengecualikan Candy_01, Candy_02, dll.)
+			statusTextLabel.Text = "🎁 Mengambil Model Ritual Candy..."
+			local halloweenFolder = Workspace:FindFirstChild("HalloweenCandy")
+			
+			if halloweenFolder then
+				for _, child in ipairs(halloweenFolder:GetChildren()) do
+					local nameLower = string.lower(child.Name)
+					
+					-- FILTER KHUSUS: Hanya ambil Model & Pastikan BUKAN Candy_01, Candy_02, dst.
+					if child:IsA("Model") and not string.find(nameLower, "^candy_%d+") then
+						local part = child:FindFirstChildWhichIsA("BasePart", true)
+						if part then
+							safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
+							ScriptState.lastTargetModel = part
+							task.wait(0.2)
 						end
+						triggerAutoPickup(child)
+						task.wait(0.5)
 					end
 				end
-			end
-
-			-- Teleport ke setiap item reward & auto-pickup
-			for _, item in ipairs(foundItems) do
-				local part = item:IsA("BasePart") and item or item:FindFirstChildWhichIsA("BasePart", true)
-				if part then
-					safeTeleport(part.CFrame * CFrame.new(0, 1, 1.5))
-					ScriptState.lastTargetModel = part
-					task.wait(0.2)
-				end
-				triggerAutoPickup(item)
-				task.wait(0.5)
 			end
 
 			-- 4. Teleport ke Workspace.CandyDropOff.Pad
@@ -587,7 +575,7 @@ local function performAutoTeleport(model)
 
 			ScriptState.collectedCount = ScriptState.collectedCount + 1
 
-			-- Teleport ke Seal setelah 2 item terproses atau jika item dilewati
+			-- Teleport ke Seal setelah 2 item terproses atau jika item dilewati (skip)
 			if ScriptState.collectedCount >= 2 or not pickedUpSuccess then
 				processSealAndRewards()
 			end
@@ -720,21 +708,18 @@ end
 ----------------------------------------------------------------
 --// 5. GLOBAL WORKSPACE MONITOR (TERMASUK HEADLESS EGG DETECTOR)
 ----------------------------------------------------------------
--- Scan Awal untuk Headless Egg di Seluruh Workspace
 for _, desc in ipairs(Workspace:GetDescendants()) do
 	if string.find(string.lower(desc.Name), "headless egg") then
 		processHeadlessEgg(desc)
 	end
 end
 
--- Monitor Objek Baru di Seluruh Workspace
 table.insert(ScriptState.Connections, Workspace.DescendantAdded:Connect(function(desc)
 	if string.find(string.lower(desc.Name), "headless egg") then
 		processHeadlessEgg(desc)
 	end
 end))
 
--- Monitor Specific Runtime Folder untuk Yin/Yang
 task.spawn(function()
 	local activeThread = true
 	table.insert(ScriptState.Connections, {
@@ -773,14 +758,12 @@ task.spawn(function()
 	end
 end)
 
--- Listener Global ProximityPrompt
 table.insert(ScriptState.Connections, ProximityPromptService.PromptShown:Connect(function(prompt)
 	if ScriptState.autoCollectEnabled then
 		firePromptCustom(prompt)
 	end
 end))
 
--- Toggle ESP Button
 table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(function()
 	ScriptState.espEnabled = not ScriptState.espEnabled
 	if ScriptState.espEnabled then
@@ -794,7 +777,6 @@ table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(functi
 	end
 end))
 
--- Toggle Auto-Ritual Button
 table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function()
 	ScriptState.autoCollectEnabled = not ScriptState.autoCollectEnabled
 	if ScriptState.autoCollectEnabled then
@@ -808,12 +790,10 @@ table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function
 	end
 end))
 
--- RenderStepped Update Distance & Camera Lock
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
 
-	-- Camera Lock ke arah target aktif (Telur/Yin-Yang/Seal/Rewards)
 	if ScriptState.autoCollectEnabled and ScriptState.lastTargetModel and ScriptState.lastTargetModel.Parent then
 		pcall(function()
 			local targetPos = ScriptState.lastTargetModel.Position
