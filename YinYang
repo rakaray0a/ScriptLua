@@ -11,9 +11,21 @@ local Players = game:GetService("Players")
 local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
 
 local player = Players.LocalPlayer
-local playerGui = player:WaitForChild("PlayerGui")
+
+--// Penentuan Parent UI yang Safe untuk Executor (CoreGui / gethui / PlayerGui)
+local parentContainer = player:WaitForChild("PlayerGui")
+if gethui then
+	parentContainer = gethui()
+elseif CoreGui then
+	pcall(function()
+		local test = Instance.new("Folder", CoreGui)
+		test:Destroy()
+		parentContainer = CoreGui
+	end)
+end
 
 -- Core Storage
 local ScriptState = {
@@ -59,7 +71,7 @@ function ScriptState.Cleanup()
 	end
 	table.clear(ScriptState.activeBillboards)
 
-	local oldGui = playerGui:FindFirstChild("ESPRitualGui")
+	local oldGui = parentContainer:FindFirstChild("ESPRitualGui")
 	if oldGui then
 		oldGui:Destroy()
 	end
@@ -68,24 +80,63 @@ end
 _G[SCRIPT_ID] = ScriptState
 
 ----------------------------------------------------------------
---// 1. MEMBUAT UI (Panel Kontrol ESP & Panel Notifikasi Spawn)
+--// FUNSI CUSTOM DRAGGABLE (Aman untuk Delta Mobile & PC)
+----------------------------------------------------------------
+local function makeDraggable(topBar, mainFrame)
+	local dragging = false
+	local dragInput, dragStart, startPos
+
+	local function update(input)
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+
+	table.insert(ScriptState.Connections, topBar.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			dragStart = input.Position
+			startPos = mainFrame.Position
+
+			table.insert(ScriptState.Connections, input.Changed:Connect(function()
+				if input.UserInputState == Enum.UserInputState.End then
+					dragging = false
+				end
+			end))
+		end
+	end))
+
+	table.insert(ScriptState.Connections, topBar.InputChanged:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+			dragInput = input
+		end
+	end))
+
+	table.insert(ScriptState.Connections, UserInputService.InputChanged:Connect(function(input)
+		if input == dragInput and dragging then
+			update(input)
+		end
+	end))
+end
+
+----------------------------------------------------------------
+--// 1. MEMBUAT UI
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ESPRitualGui"
 screenGui.ResetOnSpawn = false
+screenGui.DisplayOrder = 999999999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
-screenGui.Parent = playerGui
+screenGui.Parent = parentContainer
 
--- A. Panel Kontrol Utama ESP (Kiri Atas)
+-- A. Panel Kontrol ESP
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "ESPController"
 mainFrame.Size = UDim2.new(0, 220, 0, 130)
-mainFrame.Position = UDim2.new(0.05, 0, 0.15, 0)
+mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-mainFrame.BackgroundTransparency = 0.25
+mainFrame.BackgroundTransparency = 0.2
 mainFrame.BorderSizePixel = 0
 mainFrame.Active = true
-mainFrame.Draggable = true
 mainFrame.Parent = screenGui
 
 local uiCorner = Instance.new("UICorner")
@@ -101,7 +152,7 @@ local titleBar = Instance.new("Frame")
 titleBar.Name = "TitleBar"
 titleBar.Size = UDim2.new(1, 0, 0, 35)
 titleBar.BackgroundColor3 = Color3.fromRGB(30, 30, 40)
-titleBar.BackgroundTransparency = 0.4
+titleBar.BackgroundTransparency = 0.3
 titleBar.BorderSizePixel = 0
 titleBar.Parent = mainFrame
 
@@ -169,17 +220,15 @@ resizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
-
--- B. Panel Notifikasi Spawn (Bisa Digeser, Resize, & Minimize di Atas Tengah)
+-- B. Panel Notifikasi Spawn
 local notifFrame = Instance.new("Frame")
 notifFrame.Name = "SpawnNotifierPanel"
 notifFrame.Size = UDim2.new(0, 280, 0, 110)
 notifFrame.Position = UDim2.new(0.5, -140, 0.05, 0)
 notifFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
-notifFrame.BackgroundTransparency = 0.25
+notifFrame.BackgroundTransparency = 0.2
 notifFrame.BorderSizePixel = 0
 notifFrame.Active = true
-notifFrame.Draggable = true
 notifFrame.Parent = screenGui
 
 local notifCorner = Instance.new("UICorner")
@@ -195,7 +244,7 @@ local notifTitleBar = Instance.new("Frame")
 notifTitleBar.Name = "TitleBar"
 notifTitleBar.Size = UDim2.new(1, 0, 0, 30)
 notifTitleBar.BackgroundColor3 = Color3.fromRGB(40, 30, 50)
-notifTitleBar.BackgroundTransparency = 0.4
+notifTitleBar.BackgroundTransparency = 0.3
 notifTitleBar.BorderSizePixel = 0
 notifTitleBar.Parent = notifFrame
 
@@ -235,7 +284,6 @@ notifContent.Position = UDim2.new(0, 0, 0, 30)
 notifContent.BackgroundTransparency = 1
 notifContent.Parent = notifFrame
 
--- Label Status Teks Notifikasi Yin & Yang
 local statusTextLabel = Instance.new("TextLabel")
 statusTextLabel.Size = UDim2.new(1, -16, 1, -10)
 statusTextLabel.Position = UDim2.new(0, 8, 0, 5)
@@ -258,10 +306,13 @@ notifResizeHandle.TextColor3 = Color3.fromRGB(180, 180, 200)
 notifResizeHandle.TextSize = 12
 notifResizeHandle.Parent = notifFrame
 
+-- Pasang Fitur Drag Manual ke TitleBar Kedua Frame
+makeDraggable(titleBar, mainFrame)
+makeDraggable(notifTitleBar, notifFrame)
+
 ----------------------------------------------------------------
---// 2. LOGIKA INTERAKSI UI (Minimize & Resize untuk Kedua Panel)
+--// 2. INTERAKSI UI (Minimize & Resize)
 ----------------------------------------------------------------
--- Minimize Panel Kontrol ESP
 local isMinimizedESP = false
 table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function()
 	isMinimizedESP = not isMinimizedESP
@@ -277,7 +328,6 @@ table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function(
 	end
 end))
 
--- Minimize Panel Notifikasi
 local isMinimizedNotif = false
 table.insert(ScriptState.Connections, notifMinBtn.MouseButton1Click:Connect(function()
 	isMinimizedNotif = not isMinimizedNotif
@@ -293,7 +343,18 @@ table.insert(ScriptState.Connections, notifMinBtn.MouseButton1Click:Connect(func
 	end
 end))
 
--- Resize Handler untuk Panel Notifikasi
+-- Resize Handlers
+local draggingResizeESP = false
+local startMousePosESP, startSizeESP
+
+table.insert(ScriptState.Connections, resizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingResizeESP = true
+		startMousePosESP = input.Position
+		startSizeESP = mainFrame.AbsoluteSize
+	end
+end))
+
 local draggingResizeNotif = false
 local startMousePosNotif, startSizeNotif
 
@@ -306,22 +367,26 @@ table.insert(ScriptState.Connections, notifResizeHandle.InputBegan:Connect(funct
 end))
 
 table.insert(ScriptState.Connections, UserInputService.InputChanged:Connect(function(input)
-	if draggingResizeNotif and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - startMousePosNotif
-		local newX = math.clamp(startSizeNotif.X + delta.X, 220, 450)
-		local newY = math.clamp(startSizeNotif.Y + delta.Y, 70, 250)
-		notifFrame.Size = UDim2.new(0, newX, 0, newY)
+	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
+		if draggingResizeESP then
+			local delta = input.Position - startMousePosESP
+			mainFrame.Size = UDim2.new(0, math.clamp(startSizeESP.X + delta.X, 180, 400), 0, math.clamp(startSizeESP.Y + delta.Y, 100, 300))
+		elseif draggingResizeNotif then
+			local delta = input.Position - startMousePosNotif
+			notifFrame.Size = UDim2.new(0, math.clamp(startSizeNotif.X + delta.X, 220, 450), 0, math.clamp(startSizeNotif.Y + delta.Y, 70, 250))
+		end
 	end
 end))
 
 table.insert(ScriptState.Connections, UserInputService.InputEnded:Connect(function(input)
 	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		draggingResizeESP = false
 		draggingResizeNotif = false
 	end
 end))
 
 ----------------------------------------------------------------
---// 3. UPDATE TEKS NOTIFIKASI SPAWN SECARA REAL-TIME
+--// 3. LOGIKA ESP & SPAWN SENSING
 ----------------------------------------------------------------
 local function updateNotificationText()
 	local yinStatus = ScriptState.spawnedStatus.Yin and "🟢 SPAWN (ADA)" or "🔴 BELUM ADA"
@@ -330,9 +395,6 @@ local function updateNotificationText()
 	statusTextLabel.Text = string.format("☯️ STATUS MODEL RITUAL:\n• Yin: %s\n• Yang: %s", yinStatus, yangStatus)
 end
 
-----------------------------------------------------------------
---// 4. LOGIKA ESP & AUTO-REFRESH SENSING
-----------------------------------------------------------------
 local function getRuntimeFolder()
 	local ritual = Workspace:FindFirstChild("HeadlessRitual")
 	if ritual then
@@ -396,7 +458,6 @@ local function createESP(model)
 		return
 	end
 
-	-- Highlight (Outline 3D)
 	local highlight = Instance.new("Highlight")
 	highlight.Name = "ESPHighlight"
 	highlight.Adornee = model
@@ -407,7 +468,6 @@ local function createESP(model)
 	highlight.Parent = model
 	ScriptState.activeHighlights[model] = highlight
 
-	-- BillboardGui (Teks & Jarak)
 	local billboard = Instance.new("BillboardGui")
 	billboard.Name = "ESPBillboard"
 	billboard.Adornee = model:FindFirstChildWhichIsA("BasePart") or model
@@ -428,7 +488,6 @@ local function createESP(model)
 	billboard.Parent = model
 	ScriptState.activeBillboards[model] = {Gui = billboard, Text = textLabel, Model = model}
 
-	-- Pelacakan status ketika model diambil/hilang
 	ScriptState.trackedModels[model] = {}
 	
 	local connAncestry = model.AncestryChanged:Connect(function(_, parent)
@@ -462,7 +521,7 @@ local function scanRuntime()
 	checkStatusRealtime()
 end
 
--- Monitor Folder Runtime untuk Spawn & Despawn Otomatis
+-- Monitor Runtime Loop
 task.spawn(function()
 	local activeThread = true
 	table.insert(ScriptState.Connections, {
@@ -512,7 +571,7 @@ table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(functi
 	end
 end))
 
--- Update RenderStepped Real-Time Jarak & Sanity Check
+-- Update RenderStepped Real-Time Jarak
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
