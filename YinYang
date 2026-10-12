@@ -14,7 +14,7 @@ local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
 local TweenService = game:GetService("TweenService")
 local ProximityPromptService = game:GetService("ProximityPromptService")
-local VirtualInputManager = game:GetService("VirtualInputManager")
+local HttpService = game:GetService("HttpService")
 
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
@@ -39,11 +39,13 @@ local ScriptState = {
 	trackedModels = {},
 	espEnabled = false,
 	autoCollectEnabled = false,
+	webhookEnabled = false, -- Status On/Off Webhook Discord
 	spawnedStatus = { Yin = false, Yang = false },
 	collectedCount = 0,
 	lastTargetModel = nil,
 	isRitualInProgress = false,
-	isEggPriorityActive = false
+	isEggPriorityActive = false,
+	notifiedSpawn = { Yin = false, Yang = false } -- Mencegah spam webhook berulang untuk spawn yang sama
 }
 
 ----------------------------------------------------------------
@@ -87,6 +89,67 @@ function ScriptState.Cleanup()
 end
 
 _G[SCRIPT_ID] = ScriptState
+
+----------------------------------------------------------------
+--// FUNGSI DISCORD WEBHOOK KIRIM NOTIFIKASI
+----------------------------------------------------------------
+local function sendDiscordWebhook(itemName, modelInstance)
+	if not ScriptState.webhookEnabled then return end
+
+	task.spawn(function()
+		local url = "https://discord.com/api/webhooks/1555281458413830334/ECnrIT1j7_zSZCKtJ2lASwoOjFtTpSMi96tDmNImksnhag7e53sAUO3KXAxxldUXtYm3"
+		
+		-- Ambil posisi/lokasi model spawn
+		local targetPart = modelInstance:FindFirstChildWhichIsA("BasePart", true) or modelInstance
+		local posText = "Posisi tidak diketahui"
+		if targetPart and targetPart:IsA("BasePart") then
+			local p = targetPart.Position
+			posText = string.format("X: %.1f, Y: %.1f, Z: %.1f", p.X, p.Y, p.Z)
+		end
+
+		local title = (itemName == "Yin") and "Yin Spawn Di Server Blubub" or "Yang Spawn Di Server Blubub"
+		local colorCode = (itemName == "Yin") and 3447003 or 16776960 -- Biru untuk Yin, Kuning untuk Yang
+
+		local data = {
+			["embeds"] = {
+				{
+					["title"] = title,
+					["description"] = string.format("Item **%s** telah muncul di dalam game!", itemName),
+					["color"] = colorCode,
+					["fields"] = {
+						{
+							["name"] = "📍 Lokasi Spawn",
+							["value"] = "`" .. posText .. "`",
+							["inline"] = false
+						},
+						{
+							["name"] = "👤 Player Pemantau",
+							["value"] = player.Name,
+							["inline"] = true
+						}
+					},
+					["timestamp"] = DateTime.now():ToIsoDate()
+				}
+			}
+		}
+
+		local encodedData = HttpService:JSONEncode(data)
+		local headers = { ["Content-Type"] = "application/json" }
+
+		-- Menggunakan request HTTP executor yang tersedia
+		local requestFunc = request or http_request or (http and http.request) or syn.request
+		if requestFunc then
+			pcall(function()
+				requestFunc({
+					Url = url,
+					Method = "POST",
+					Headers = headers,
+					Body = encodedData
+				})
+			end)
+		end
+	end)
+end
 
 ----------------------------------------------------------------
 --// FUNGSI TELEPORT & PROXIMITY PROMPT
@@ -194,7 +257,7 @@ local function makeDraggable(topBar, mainFrame)
 end
 
 ----------------------------------------------------------------
---// 1. MEMBUAT UI
+--// 1. MEMBUAT UI (DENGAN TAMBAHAN TOMBOL WEBHOOK)
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ESPRitualGui"
@@ -206,7 +269,7 @@ screenGui.Parent = parentContainer
 -- Panel Kontrol
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "ESPController"
-mainFrame.Size = UDim2.new(0, 220, 0, 180)
+mainFrame.Size = UDim2.new(0, 220, 0, 225) -- Diperbesar sedikit untuk tombol webhook
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 mainFrame.BackgroundTransparency = 0.2
@@ -267,33 +330,50 @@ contentFrame.Position = UDim2.new(0, 0, 0, 35)
 contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
+-- Tombol Toggle ESP
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
-toggleBtn.Position = UDim2.new(0.05, 0, 0.1, 0)
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 32)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.05, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.Text = "ESP: OFF"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-toggleBtn.TextSize = 13
+toggleBtn.TextSize = 12
 toggleBtn.Parent = contentFrame
 
 local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 8)
 btnCorner.Parent = toggleBtn
 
+-- Tombol Toggle Auto-Ritual
 local autoBtn = Instance.new("TextButton")
-autoBtn.Size = UDim2.new(0.9, 0, 0, 35)
-autoBtn.Position = UDim2.new(0.05, 0, 0.55, 0)
+autoBtn.Size = UDim2.new(0.9, 0, 0, 32)
+autoBtn.Position = UDim2.new(0.05, 0, 0.38, 0)
 autoBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
 autoBtn.Font = Enum.Font.GothamBold
 autoBtn.Text = "Auto-Ritual: OFF"
 autoBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
-autoBtn.TextSize = 13
+autoBtn.TextSize = 12
 autoBtn.Parent = contentFrame
 
 local autoCorner = Instance.new("UICorner")
 autoCorner.CornerRadius = UDim.new(0, 8)
 autoCorner.Parent = autoBtn
+
+-- Tombol Toggle Webhook Discord
+local webhookBtn = Instance.new("TextButton")
+webhookBtn.Size = UDim2.new(0.9, 0, 0, 32)
+webhookBtn.Position = UDim2.new(0.05, 0, 0.71, 0)
+webhookBtn.BackgroundColor3 = Color3.fromRGB(40, 40, 55)
+webhookBtn.Font = Enum.Font.GothamBold
+webhookBtn.Text = "Webhook: OFF"
+webhookBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+webhookBtn.TextSize = 12
+webhookBtn.Parent = contentFrame
+
+local webhookCorner = Instance.new("UICorner")
+webhookCorner.CornerRadius = UDim.new(0, 8)
+webhookCorner.Parent = webhookBtn
 
 local resizeHandle = Instance.new("TextButton")
 resizeHandle.Size = UDim2.new(0, 20, 0, 20)
@@ -400,7 +480,7 @@ table.insert(ScriptState.Connections, minBtn.MouseButton1Click:Connect(function(
 		minBtn.Text = "+"
 		resizeHandle.Visible = false
 	else
-		mainFrame.Size = UDim2.new(0, 220, 0, 180)
+		mainFrame.Size = UDim2.new(0, 220, 0, 225)
 		minBtn.Text = "-"
 		resizeHandle.Visible = true
 	end
@@ -447,7 +527,7 @@ table.insert(ScriptState.Connections, UserInputService.InputChanged:Connect(func
 	if input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch then
 		if draggingResizeESP then
 			local delta = input.Position - startMousePosESP
-			mainFrame.Size = UDim2.new(0, math.clamp(startSizeESP.X + delta.X, 180, 400), 0, math.clamp(startSizeESP.Y + delta.Y, 120, 300))
+			mainFrame.Size = UDim2.new(0, math.clamp(startSizeESP.X + delta.X, 180, 400), 0, math.clamp(startSizeESP.Y + delta.Y, 150, 350))
 		elseif draggingResizeNotif then
 			local delta = input.Position - startMousePosNotif
 			notifFrame.Size = UDim2.new(0, math.clamp(startSizeNotif.X + delta.X, 220, 450), 0, math.clamp(startSizeNotif.Y + delta.Y, 70, 250))
@@ -499,15 +579,13 @@ local function processSealAndRewards()
 
 			task.wait(0.5)
 
-			-- 3. Teleport HANYA ke Model Candy Dinamis di HalloweenCandy (Mengecualikan Candy_01, Candy_02, dll.)
+			-- 3. Teleport ke setiap Model Candy Dinamis di HalloweenCandy (Kecuali Candy_01, 02, dst.)
 			statusTextLabel.Text = "🎁 Mengambil Model Ritual Candy..."
 			local halloweenFolder = Workspace:FindFirstChild("HalloweenCandy")
 			
 			if halloweenFolder then
 				for _, child in ipairs(halloweenFolder:GetChildren()) do
 					local nameLower = string.lower(child.Name)
-					
-					-- FILTER KHUSUS: Hanya ambil Model & Pastikan BUKAN Candy_01, Candy_02, dst.
 					if child:IsA("Model") and not string.find(nameLower, "^candy_%d+") then
 						local part = child:FindFirstChildWhichIsA("BasePart", true)
 						if part then
@@ -534,10 +612,12 @@ local function processSealAndRewards()
 			end
 		end
 
-		-- Reset Status untuk Looping
+		-- Reset Status untuk Looping & Notif Webhook
 		ScriptState.collectedCount = 0
 		ScriptState.lastTargetModel = nil
 		ScriptState.isRitualInProgress = false
+		ScriptState.notifiedSpawn.Yin = false
+		ScriptState.notifiedSpawn.Yang = false
 	end)
 end
 
@@ -596,12 +676,34 @@ local function checkStatusRealtime()
 	local headlessRitual = Workspace:FindFirstChild("HeadlessRitual")
 	local runtimeFolder = headlessRitual and headlessRitual:FindFirstChild("Runtime")
 	local hasYin, hasYang = false, false
+	local yinModel, yangModel = nil, nil
 	
 	if runtimeFolder then
 		for _, child in ipairs(runtimeFolder:GetChildren()) do
-			if child.Name == "Yin" then hasYin = true end
-			if child.Name == "Yang" then hasYang = true end
+			if child.Name == "Yin" then
+				hasYin = true
+				yinModel = child
+			elseif child.Name == "Yang" then
+				hasYang = true
+				yangModel = child
+			end
 		end
+	end
+
+	-- Trigger Webhook saat Yin Spawn Pertama Kali
+	if hasYin and not ScriptState.notifiedSpawn.Yin then
+		ScriptState.notifiedSpawn.Yin = true
+		sendDiscordWebhook("Yin", yinModel)
+	elseif not hasYin then
+		ScriptState.notifiedSpawn.Yin = false
+	end
+
+	-- Trigger Webhook saat Yang Spawn Pertama Kali
+	if hasYang and not ScriptState.notifiedSpawn.Yang then
+		ScriptState.notifiedSpawn.Yang = true
+		sendDiscordWebhook("Yang", yangModel)
+	elseif not hasYang then
+		ScriptState.notifiedSpawn.Yang = false
 	end
 
 	ScriptState.spawnedStatus.Yin = hasYin
@@ -706,7 +808,7 @@ local function scanRuntime()
 end
 
 ----------------------------------------------------------------
---// 5. GLOBAL WORKSPACE MONITOR (TERMASUK HEADLESS EGG DETECTOR)
+--// 5. GLOBAL WORKSPACE MONITOR (TERMASUK HEADLESS EGG & WEBHOOK)
 ----------------------------------------------------------------
 for _, desc in ipairs(Workspace:GetDescendants()) do
 	if string.find(string.lower(desc.Name), "headless egg") then
@@ -764,6 +866,7 @@ table.insert(ScriptState.Connections, ProximityPromptService.PromptShown:Connect
 	end
 end))
 
+-- Toggle ESP Button
 table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(function()
 	ScriptState.espEnabled = not ScriptState.espEnabled
 	if ScriptState.espEnabled then
@@ -777,6 +880,7 @@ table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(functi
 	end
 end))
 
+-- Toggle Auto-Ritual Button
 table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function()
 	ScriptState.autoCollectEnabled = not ScriptState.autoCollectEnabled
 	if ScriptState.autoCollectEnabled then
@@ -790,6 +894,19 @@ table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function
 	end
 end))
 
+-- Toggle Webhook Discord Button
+table.insert(ScriptState.Connections, webhookBtn.MouseButton1Click:Connect(function()
+	ScriptState.webhookEnabled = not ScriptState.webhookEnabled
+	if ScriptState.webhookEnabled then
+		webhookBtn.Text = "Webhook: ON"
+		webhookBtn.TextColor3 = Color3.fromRGB(100, 255, 100)
+	else
+		webhookBtn.Text = "Webhook: OFF"
+		webhookBtn.TextColor3 = Color3.fromRGB(255, 100, 100)
+	end
+end))
+
+-- RenderStepped Update Distance & Camera Lock
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
