@@ -39,13 +39,13 @@ local ScriptState = {
 	trackedModels = {},
 	espEnabled = false,
 	autoCollectEnabled = false,
-	webhookEnabled = false, -- Status On/Off Webhook Discord
+	webhookEnabled = false,
 	spawnedStatus = { Yin = false, Yang = false },
 	collectedCount = 0,
 	lastTargetModel = nil,
 	isRitualInProgress = false,
 	isEggPriorityActive = false,
-	notifiedSpawn = { Yin = false, Yang = false } -- Mencegah spam webhook berulang untuk spawn yang sama
+	notifiedSpawn = { Yin = false, Yang = false }
 }
 
 ----------------------------------------------------------------
@@ -91,7 +91,7 @@ end
 _G[SCRIPT_ID] = ScriptState
 
 ----------------------------------------------------------------
---// FUNGSI DISCORD WEBHOOK KIRIM NOTIFIKASI
+--// FUNGSI DISCORD WEBHOOK KIRIM NOTIFIKASI (UPDATED)
 ----------------------------------------------------------------
 local function sendDiscordWebhook(itemName, modelInstance)
 	if not ScriptState.webhookEnabled then return end
@@ -100,32 +100,40 @@ local function sendDiscordWebhook(itemName, modelInstance)
 		local url = "https://discord.com/api/webhooks/1555281458413830334/ECnrIT1j7_zSZCKtJ2lASwoOjFtTpSMi96tDmNImksnhag7e53sAUO3KXAxxldUXtYm3"
 		
 		-- Ambil posisi/lokasi model spawn
-		local targetPart = modelInstance:FindFirstChildWhichIsA("BasePart", true) or modelInstance
+		local targetPart = modelInstance and (modelInstance:FindFirstChildWhichIsA("BasePart", true) or modelInstance)
 		local posText = "Posisi tidak diketahui"
 		if targetPart and targetPart:IsA("BasePart") then
 			local p = targetPart.Position
-			posText = string.format("X: %.1f, Y: %.1f, Z: %.1f", p.X, p.Y, p.Z)
+			posText = string.format("X: %.1f | Y: %.1f | Z: %.1f", p.X, p.Y, p.Z)
 		end
 
-		local title = (itemName == "Yin") and "Yin Spawn Di Server Blubub" or "Yang Spawn Di Server Blubub"
-		local colorCode = (itemName == "Yin") and 3447003 or 16776960 -- Biru untuk Yin, Kuning untuk Yang
+		local title, colorCode, iconUrl, descriptionText
+		if itemName == "Yin" then
+			title = "☯️ Yin Spawn Di Server Blubub"
+			colorCode = 3447003 -- Biru/Cyan
+			iconUrl = "https://i.imgur.com/8QZ74aL.png" -- Logo Yin
+			descriptionText = "✨ **Item Yin** telah terdeteksi muncul di dalam area Ritual!"
+		else
+			title = "☯️ Yang Spawn Di Server Blubub"
+			colorCode = 16776960 -- Gold/Kuning
+			iconUrl = "https://i.imgur.com/K3aR4S4.png" -- Logo Yang
+			descriptionText = "🌟 **Item Yang** telah terdeteksi muncul di dalam area Ritual!"
+		end
 
 		local data = {
 			["embeds"] = {
 				{
 					["title"] = title,
-					["description"] = string.format("Item **%s** telah muncul di dalam game!", itemName),
+					["description"] = descriptionText,
 					["color"] = colorCode,
+					["thumbnail"] = {
+						["url"] = iconUrl
+					},
 					["fields"] = {
 						{
-							["name"] = "📍 Lokasi Spawn",
-							["value"] = "`" .. posText .. "`",
+							["name"] = "📍 Koordinat Lokasi Spawn",
+							["value"] = "```yaml\n" .. posText .. "\n```",
 							["inline"] = false
-						},
-						{
-							["name"] = "👤 Player Pemantau",
-							["value"] = player.Name,
-							["inline"] = true
 						}
 					},
 					["timestamp"] = DateTime.now():ToIsoDate()
@@ -136,7 +144,6 @@ local function sendDiscordWebhook(itemName, modelInstance)
 		local encodedData = HttpService:JSONEncode(data)
 		local headers = { ["Content-Type"] = "application/json" }
 
-		-- Menggunakan request HTTP executor yang tersedia
 		local requestFunc = request or http_request or (http and http.request) or syn.request
 		if requestFunc then
 			pcall(function()
@@ -257,7 +264,7 @@ local function makeDraggable(topBar, mainFrame)
 end
 
 ----------------------------------------------------------------
---// 1. MEMBUAT UI (DENGAN TAMBAHAN TOMBOL WEBHOOK)
+--// 1. MEMBUAT UI
 ----------------------------------------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "ESPRitualGui"
@@ -266,10 +273,10 @@ screenGui.DisplayOrder = 999999999
 screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
 screenGui.Parent = parentContainer
 
--- Panel Kontrol
+-- Panel Kontrol Utama
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "ESPController"
-mainFrame.Size = UDim2.new(0, 220, 0, 225) -- Diperbesar sedikit untuk tombol webhook
+mainFrame.Size = UDim2.new(0, 220, 0, 225)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(20, 20, 25)
 mainFrame.BackgroundTransparency = 0.2
@@ -330,7 +337,7 @@ contentFrame.Position = UDim2.new(0, 0, 0, 35)
 contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
--- Tombol Toggle ESP
+-- Toggle ESP Button
 local toggleBtn = Instance.new("TextButton")
 toggleBtn.Size = UDim2.new(0.9, 0, 0, 32)
 toggleBtn.Position = UDim2.new(0.05, 0, 0.05, 0)
@@ -345,7 +352,7 @@ local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 8)
 btnCorner.Parent = toggleBtn
 
--- Tombol Toggle Auto-Ritual
+-- Toggle Auto-Ritual Button
 local autoBtn = Instance.new("TextButton")
 autoBtn.Size = UDim2.new(0.9, 0, 0, 32)
 autoBtn.Position = UDim2.new(0.05, 0, 0.38, 0)
@@ -360,7 +367,7 @@ local autoCorner = Instance.new("UICorner")
 autoCorner.CornerRadius = UDim.new(0, 8)
 autoCorner.Parent = autoBtn
 
--- Tombol Toggle Webhook Discord
+-- Toggle Webhook Discord Button
 local webhookBtn = Instance.new("TextButton")
 webhookBtn.Size = UDim2.new(0.9, 0, 0, 32)
 webhookBtn.Position = UDim2.new(0.05, 0, 0.71, 0)
@@ -579,7 +586,7 @@ local function processSealAndRewards()
 
 			task.wait(0.5)
 
-			-- 3. Teleport ke setiap Model Candy Dinamis di HalloweenCandy (Kecuali Candy_01, 02, dst.)
+			-- 3. Teleport HANYA ke Model Candy Dinamis di HalloweenCandy (Mengecualikan Candy_01, 02, dst.)
 			statusTextLabel.Text = "🎁 Mengambil Model Ritual Candy..."
 			local halloweenFolder = Workspace:FindFirstChild("HalloweenCandy")
 			
@@ -612,7 +619,7 @@ local function processSealAndRewards()
 			end
 		end
 
-		-- Reset Status untuk Looping & Notif Webhook
+		-- Reset Status untuk Looping
 		ScriptState.collectedCount = 0
 		ScriptState.lastTargetModel = nil
 		ScriptState.isRitualInProgress = false
@@ -690,7 +697,7 @@ local function checkStatusRealtime()
 		end
 	end
 
-	-- Trigger Webhook saat Yin Spawn Pertama Kali
+	-- Trigger Webhook saat Yin Spawn
 	if hasYin and not ScriptState.notifiedSpawn.Yin then
 		ScriptState.notifiedSpawn.Yin = true
 		sendDiscordWebhook("Yin", yinModel)
@@ -698,7 +705,7 @@ local function checkStatusRealtime()
 		ScriptState.notifiedSpawn.Yin = false
 	end
 
-	-- Trigger Webhook saat Yang Spawn Pertama Kali
+	-- Trigger Webhook saat Yang Spawn
 	if hasYang and not ScriptState.notifiedSpawn.Yang then
 		ScriptState.notifiedSpawn.Yang = true
 		sendDiscordWebhook("Yang", yangModel)
@@ -808,7 +815,7 @@ local function scanRuntime()
 end
 
 ----------------------------------------------------------------
---// 5. GLOBAL WORKSPACE MONITOR (TERMASUK HEADLESS EGG & WEBHOOK)
+--// 5. GLOBAL WORKSPACE MONITOR (TERMASUK HEADLESS EGG DETECTOR)
 ----------------------------------------------------------------
 for _, desc in ipairs(Workspace:GetDescendants()) do
 	if string.find(string.lower(desc.Name), "headless egg") then
@@ -866,7 +873,6 @@ table.insert(ScriptState.Connections, ProximityPromptService.PromptShown:Connect
 	end
 end))
 
--- Toggle ESP Button
 table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(function()
 	ScriptState.espEnabled = not ScriptState.espEnabled
 	if ScriptState.espEnabled then
@@ -880,7 +886,6 @@ table.insert(ScriptState.Connections, toggleBtn.MouseButton1Click:Connect(functi
 	end
 end))
 
--- Toggle Auto-Ritual Button
 table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function()
 	ScriptState.autoCollectEnabled = not ScriptState.autoCollectEnabled
 	if ScriptState.autoCollectEnabled then
@@ -894,7 +899,6 @@ table.insert(ScriptState.Connections, autoBtn.MouseButton1Click:Connect(function
 	end
 end))
 
--- Toggle Webhook Discord Button
 table.insert(ScriptState.Connections, webhookBtn.MouseButton1Click:Connect(function()
 	ScriptState.webhookEnabled = not ScriptState.webhookEnabled
 	if ScriptState.webhookEnabled then
@@ -906,7 +910,6 @@ table.insert(ScriptState.Connections, webhookBtn.MouseButton1Click:Connect(funct
 	end
 end))
 
--- RenderStepped Update Distance & Camera Lock
 table.insert(ScriptState.Connections, RunService.RenderStepped:Connect(function()
 	local char = player.Character
 	local rootPart = char and char:FindFirstChild("HumanoidRootPart")
