@@ -53,6 +53,7 @@ end
 getgenv().PersistentEggFilters = getgenv().PersistentEggFilters or {}
 getgenv().PersistentPumpkinFilters = getgenv().PersistentPumpkinFilters or {}
 getgenv().PersistentKaloloFilters = getgenv().PersistentKaloloFilters or {}
+getgenv().PumpkinTPEnabled = getgenv().PumpkinTPEnabled ~= nil and getgenv().PumpkinTPEnabled or true
 
 local eggFilters = getgenv().PersistentEggFilters
 local pumpkinFilters = getgenv().PersistentPumpkinFilters
@@ -245,6 +246,27 @@ scrollingPumpkins.ScrollBarThickness = 4
 scrollingPumpkins.Visible = false
 scrollingPumpkins.Parent = mainFrame
 local layoutPumpkins = Instance.new("UIListLayout", scrollingPumpkins); layoutPumpkins.Padding = UDim.new(0, 6)
+
+-- Master Teleport Toggle Button di bagian atas Tab Pumpkins
+local masterTpBtn = Instance.new("TextButton")
+masterTpBtn.Size = UDim2.new(1, 0, 0, 28)
+masterTpBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+masterTpBtn.Text = getgenv().PumpkinTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+masterTpBtn.TextColor3 = getgenv().PumpkinTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+masterTpBtn.TextSize, masterTpBtn.Font = 11, Enum.Font.GothamBold
+masterTpBtn.Parent = scrollingPumpkins
+Instance.new("UICorner", masterTpBtn).CornerRadius = UDim.new(0, 6)
+
+masterTpBtn.MouseButton1Click:Connect(function()
+	getgenv().PumpkinTPEnabled = not getgenv().PumpkinTPEnabled
+	if getgenv().PumpkinTPEnabled then
+		masterTpBtn.Text = "Teleport Feature: ON"
+		masterTpBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
+	else
+		masterTpBtn.Text = "Teleport Feature: OFF"
+		masterTpBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+	end
+end)
 
 --// ScrollingFrame untuk KingKalolo Egg
 local scrollingKalolo = Instance.new("ScrollingFrame")
@@ -496,7 +518,7 @@ table.insert(activeConnections, wildEggsFolder.ChildAdded:Connect(function(child
 table.insert(activeConnections, wildEggsFolder.ChildRemoved:Connect(function(child) removeESP(child) end))
 
 
---// --- ESP 2: ACTIVE PUMPKINS (PERSISTENT & AUTO REMOVE) ---
+--// --- ESP 2: ACTIVE PUMPKINS (WITH TELEPORT BUTTON & ON/OFF) ---
 local function updatePumpkinESPVisibility()
 	for model, espData in pairs(activePumpkinESPs) do
 		if model and model.Parent then
@@ -537,7 +559,7 @@ local function addPumpkinESP(model)
 	checkIndicator.Parent = toggleButton
 
 	local nameLabel = Instance.new("TextLabel")
-	nameLabel.Size = UDim2.new(1, -35, 1, 0)
+	nameLabel.Size = UDim2.new(1, -85, 1, 0)
 	nameLabel.Position = UDim2.new(0, 32, 0, 0)
 	nameLabel.BackgroundTransparency = 1
 	nameLabel.Text = tostring(pName)
@@ -545,6 +567,31 @@ local function addPumpkinESP(model)
 	nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Parent = toggleButton
+
+	-- Tombol Teleport (TP) per Pumpkin
+	local tpButton = Instance.new("TextButton")
+	tpButton.Size = UDim2.new(0, 45, 0, 22)
+	tpButton.Position = UDim2.new(1, -50, 0.5, -11)
+	tpButton.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
+	tpButton.Text = "TP"
+	tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+	tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
+	tpButton.Parent = toggleButton
+	Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
+
+	tpButton.MouseButton1Click:Connect(function()
+		if getgenv().PumpkinTPEnabled and model and model.Parent then
+			local targetPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+			if not targetPart then
+				for _, desc in ipairs(model:GetDescendants()) do
+					if desc:IsA("BasePart") then targetPart = desc break end
+				end
+			end
+			if targetPart and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+				player.Character.HumanoidRootPart.CFrame = targetPart.CFrame + Vector3.new(0, 3, 0)
+			end
+		end
+	end)
 
 	toggleButton.MouseButton1Click:Connect(function()
 		pumpkinFilters[pName] = not pumpkinFilters[pName]
@@ -626,7 +673,7 @@ if successPumpkins and activePumpkinsFolder then
 end
 
 
---// --- ESP 3: KING KALOLO EGG (DIPERBAIKI DENGAN NAMA "KingKalolo Egg") ---
+--// --- ESP 3: KING KALOLO EGG (PERSISTENT & AUTO REMOVE) ---
 local function updateKaloloESPVisibility()
 	for model, espData in pairs(activeKaloloESPs) do
 		if model and model.Parent then
@@ -648,7 +695,7 @@ local function addKaloloESP(model)
 		kaloloFilters[kName] = true
 	end
 
-	local kaloloColor = Color3.fromRGB(170, 0, 255) -- Warna Ungu Keren untuk Boss/Kalolo
+	local kaloloColor = Color3.fromRGB(170, 0, 255)
 	local toggleButton = Instance.new("TextButton")
 	toggleButton.Size = UDim2.new(1, 0, 0, 32)
 	toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
