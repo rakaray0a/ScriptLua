@@ -1,0 +1,769 @@
+--// Mencegah penumpukan skrip saat di-execute ulang (Aman untuk PC & Mobile Executor seperti Delta)
+if getgenv().WildPumpkinKaloloESPLoaded then
+	pcall(getgenv().WildPumpkinKaloloESPLoaded)
+end
+
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local player = Players.LocalPlayer
+
+--// Path ke folder-folder target
+local successEggs, wildEggsFolder = pcall(function()
+	return Workspace:WaitForChild("EggRuntime"):WaitForChild("WildEggs")
+end)
+
+local successPumpkins, activePumpkinsFolder = pcall(function()
+	return Workspace:WaitForChild("ActivePumpkins")
+end)
+
+local successKalolo, kaloloBossFolder = pcall(function()
+	return Workspace:WaitForChild("KingKaloloBossRuntime")
+end)
+
+if not successEggs or not wildEggsFolder then
+	warn("Folder Workspace.EggRuntime.WildEggs tidak ditemukan!")
+	return
+end
+
+--// Setup ScreenGui dengan Proteksi Executor
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AllESPGui_Executor"
+screenGui.ResetOnSpawn = false
+
+local successGui = pcall(function()
+	if syn and syn.protect_gui then
+		syn.protect_gui(screenGui)
+		screenGui.Parent = CoreGui
+	elseif protectgui then
+		protectgui(screenGui)
+		screenGui.Parent = CoreGui
+	else
+		screenGui.Parent = player:WaitForChild("PlayerGui")
+	end
+end)
+if not successGui then
+	screenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+--// Tabel Filter Persisten (Status On/Off tersimpan walau re-execute / respawn)
+getgenv().PersistentEggFilters = getgenv().PersistentEggFilters or {}
+getgenv().PersistentPumpkinFilters = getgenv().PersistentPumpkinFilters or {}
+getgenv().PersistentKaloloFilters = getgenv().PersistentKaloloFilters or {}
+
+local eggFilters = getgenv().PersistentEggFilters
+local pumpkinFilters = getgenv().PersistentPumpkinFilters
+local kaloloFilters = getgenv().PersistentKaloloFilters
+
+--// Variabel & Tabel Manajemen Cleanup
+local activeConnections = {}
+local activeESPs = {}
+local eggUiButtons = {}
+
+local activePumpkinESPs = {}
+local activeKaloloESPs = {}
+
+local function fullCleanup()
+	for _, conn in ipairs(activeConnections) do
+		if typeof(conn) == "RBXScriptConnection" then
+			conn:Disconnect()
+		end
+	end
+	for _, espData in pairs(activeESPs) do
+		if espData.Connection then espData.Connection:Disconnect() end
+		if espData.Highlight then espData.Highlight:Destroy() end
+		if espData.Billboard then espData.Billboard:Destroy() end
+	end
+	for _, btn in pairs(eggUiButtons) do
+		if btn then btn:Destroy() end
+	end
+	for _, espData in pairs(activePumpkinESPs) do
+		if espData.Connection then espData.Connection:Disconnect() end
+		if espData.Highlight then espData.Highlight:Destroy() end
+		if espData.Billboard then espData.Billboard:Destroy() end
+		if espData.UiButton then espData.UiButton:Destroy() end
+	end
+	for _, espData in pairs(activeKaloloESPs) do
+		if espData.Connection then espData.Connection:Disconnect() end
+		if espData.Highlight then espData.Highlight:Destroy() end
+		if espData.Billboard then espData.Billboard:Destroy() end
+		if espData.UiButton then espData.UiButton:Destroy() end
+	end
+	table.clear(activeESPs)
+	table.clear(eggUiButtons)
+	table.clear(activePumpkinESPs)
+	table.clear(activeKaloloESPs)
+	if screenGui then
+		screenGui:Destroy()
+	end
+end
+getgenv().WildPumpkinKaloloESPLoaded = fullCleanup
+
+--// Fungsi Warna Konsisten untuk Eggs
+local function getEggColor(name)
+	local hash = 0
+	for i = 1, #name do
+		hash = hash + string.byte(name, i)
+	end
+	local colorPalette = {
+		Color3.fromRGB(0, 255, 170),   -- Neon Teal
+		Color3.fromRGB(255, 80, 150),  -- Hot Pink
+		Color3.fromRGB(255, 170, 0),   -- Neon Orange
+		Color3.fromRGB(140, 80, 255),  -- Electric Purple
+		Color3.fromRGB(50, 180, 255),  -- Electric Blue
+		Color3.fromRGB(255, 230, 0),   -- Bright Yellow
+		Color3.fromRGB(0, 255, 100),   -- Neon Green
+		Color3.fromRGB(255, 90, 90)    -- Bright Red
+	}
+	return colorPalette[(hash % #colorPalette) + 1]
+end
+
+--// --- PEMBUATAN UI UTAMA ---
+local mainFrame = Instance.new("Frame")
+mainFrame.Size = UDim2.new(0, 260, 0, 330)
+mainFrame.Position = UDim2.new(0, 50, 0, 150)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 8)
+mainCorner.Parent = mainFrame
+
+--// TopBar (Untuk Drag / Geser UI)
+local topBar = Instance.new("Frame")
+topBar.Size = UDim2.new(1, 0, 0, 35)
+topBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+topBar.BorderSizePixel = 0
+topBar.Parent = mainFrame
+
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(0, 8)
+topCorner.Parent = topBar
+
+local fixTopBar = Instance.new("Frame")
+fixTopBar.Size = UDim2.new(1, 0, 0, 5)
+fixTopBar.Position = UDim2.new(0, 0, 1, -5)
+fixTopBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+fixTopBar.BorderSizePixel = 0
+fixTopBar.Parent = topBar
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -70, 1, 0)
+titleLabel.Position = UDim2.new(0, 10, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Multi ESP Hub"
+titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleLabel.TextSize = 13
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = topBar
+
+--// Tombol Minimize (-)
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 30, 0, 30)
+minimizeBtn.Position = UDim2.new(1, -65, 0, 2)
+minimizeBtn.BackgroundTransparency = 1
+minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+minimizeBtn.TextSize = 18
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = topBar
+
+--// Tombol Close (X)
+local closeBtn = Instance.new("TextButton")
+closeBtn.Size = UDim2.new(0, 30, 0, 30)
+closeBtn.Position = UDim2.new(1, -32, 0, 2)
+closeBtn.BackgroundTransparency = 1
+closeBtn.Text = "X"
+closeBtn.TextColor3 = Color3.fromRGB(255, 90, 90)
+closeBtn.TextSize = 14
+closeBtn.Font = Enum.Font.GothamBold
+closeBtn.Parent = topBar
+
+--// Tab Bar (3 Pilihan Menu: Wild Eggs, Pumpkins, KingKalolo)
+local tabBar = Instance.new("Frame")
+tabBar.Size = UDim2.new(1, -16, 0, 30)
+tabBar.Position = UDim2.new(0, 8, 0, 42)
+tabBar.BackgroundTransparency = 1
+tabBar.Parent = mainFrame
+
+local btnTabEggs = Instance.new("TextButton")
+btnTabEggs.Size = UDim2.new(0.32, 0, 1, 0)
+btnTabEggs.Position = UDim2.new(0, 0, 0, 0)
+btnTabEggs.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+btnTabEggs.Text = "Eggs"
+btnTabEggs.TextColor3 = Color3.fromRGB(255, 255, 255)
+btnTabEggs.TextSize, btnTabEggs.Font = 11, Enum.Font.GothamBold
+btnTabEggs.Parent = tabBar
+Instance.new("UICorner", btnTabEggs).CornerRadius = UDim.new(0, 6)
+
+local btnTabPumpkins = Instance.new("TextButton")
+btnTabPumpkins.Size = UDim2.new(0.32, 0, 1, 0)
+btnTabPumpkins.Position = UDim2.new(0.34, 0, 0, 0)
+btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+btnTabPumpkins.Text = "Pumpkins"
+btnTabPumpkins.TextColor3 = Color3.fromRGB(200, 200, 200)
+btnTabPumpkins.TextSize, btnTabPumpkins.Font = 11, Enum.Font.GothamBold
+btnTabPumpkins.Parent = tabBar
+Instance.new("UICorner", btnTabPumpkins).CornerRadius = UDim.new(0, 6)
+
+local btnTabKalolo = Instance.new("TextButton")
+btnTabKalolo.Size = UDim2.new(0.32, 0, 1, 0)
+btnTabKalolo.Position = UDim2.new(0.68, 0, 0, 0)
+btnTabKalolo.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+btnTabKalolo.Text = "Kalolo"
+btnTabKalolo.TextColor3 = Color3.fromRGB(200, 200, 200)
+btnTabKalolo.TextSize, btnTabKalolo.Font = 11, Enum.Font.GothamBold
+btnTabKalolo.Parent = tabBar
+Instance.new("UICorner", btnTabKalolo).CornerRadius = UDim.new(0, 6)
+
+--// ScrollingFrame untuk Wild Eggs
+local scrollingEggs = Instance.new("ScrollingFrame")
+scrollingEggs.Size = UDim2.new(1, -16, 1, -85)
+scrollingEggs.Position = UDim2.new(0, 8, 0, 78)
+scrollingEggs.BackgroundTransparency = 1
+scrollingEggs.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingEggs.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollingEggs.ScrollBarThickness = 4
+scrollingEggs.Visible = true
+scrollingEggs.Parent = mainFrame
+local layoutEggs = Instance.new("UIListLayout", scrollingEggs); layoutEggs.Padding = UDim.new(0, 6)
+
+--// ScrollingFrame untuk ActivePumpkins
+local scrollingPumpkins = Instance.new("ScrollingFrame")
+scrollingPumpkins.Size = UDim2.new(1, -16, 1, -85)
+scrollingPumpkins.Position = UDim2.new(0, 8, 0, 78)
+scrollingPumpkins.BackgroundTransparency = 1
+scrollingPumpkins.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingPumpkins.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollingPumpkins.ScrollBarThickness = 4
+scrollingPumpkins.Visible = false
+scrollingPumpkins.Parent = mainFrame
+local layoutPumpkins = Instance.new("UIListLayout", scrollingPumpkins); layoutPumpkins.Padding = UDim.new(0, 6)
+
+--// ScrollingFrame untuk KingKalolo Egg
+local scrollingKalolo = Instance.new("ScrollingFrame")
+scrollingKalolo.Size = UDim2.new(1, -16, 1, -85)
+scrollingKalolo.Position = UDim2.new(0, 8, 0, 78)
+scrollingKalolo.BackgroundTransparency = 1
+scrollingKalolo.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingKalolo.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollingKalolo.ScrollBarThickness = 4
+scrollingKalolo.Visible = false
+scrollingKalolo.Parent = mainFrame
+local layoutKalolo = Instance.new("UIListLayout", scrollingKalolo); layoutKalolo.Padding = UDim.new(0, 6)
+
+-- Fungsi Navigasi Tab
+btnTabEggs.MouseButton1Click:Connect(function()
+	scrollingEggs.Visible = true; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false
+	btnTabEggs.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnTabEggs.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabPumpkins.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btnTabKalolo.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabKalolo.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+btnTabPumpkins.MouseButton1Click:Connect(function()
+	scrollingEggs.Visible = false; scrollingPumpkins.Visible = true; scrollingKalolo.Visible = false
+	btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnTabPumpkins.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnTabEggs.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabEggs.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btnTabKalolo.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabKalolo.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+btnTabKalolo.MouseButton1Click:Connect(function()
+	scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = true
+	btnTabKalolo.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnTabKalolo.TextColor3 = Color3.fromRGB(255, 255, 255)
+	btnTabEggs.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabEggs.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabPumpkins.TextColor3 = Color3.fromRGB(200, 200, 200)
+end)
+
+--// Resizer Handle (Pojok Kanan Bawah)
+local resizeHandle = Instance.new("TextButton")
+resizeHandle.Size = UDim2.new(0, 16, 0, 16)
+resizeHandle.Position = UDim2.new(1, -16, 1, -16)
+resizeHandle.BackgroundTransparency = 1
+resizeHandle.Text = "◢"
+resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 150)
+resizeHandle.TextSize = 12
+resizeHandle.Parent = mainFrame
+
+--// --- LOGIKA DRAG, MINIMIZE, & RESIZE ---
+local dragging, resizing, dragStart, resizeStart, startPos, startSize
+local isMinimized = false
+local normalSize = mainFrame.Size
+
+table.insert(activeConnections, topBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+	end
+end))
+
+table.insert(activeConnections, UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+	end
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - resizeStart
+		local newW = math.clamp(startSize.X.Offset + delta.X, 200, 500)
+		local newH = math.clamp(startSize.Y.Offset + delta.Y, 180, 600)
+		mainFrame.Size = UDim2.new(0, newW, 0, newH)
+		if not isMinimized then normalSize = mainFrame.Size end
+	end
+end))
+
+table.insert(activeConnections, resizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = true; resizeStart = input.Position; startSize = mainFrame.Size
+		input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then resizing = false end end)
+	end
+end))
+
+minimizeBtn.MouseButton1Click:Connect(function()
+	isMinimized = not isMinimized
+	if isMinimized then
+		normalSize = mainFrame.Size
+		minimizeBtn.Text = "+"
+		scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false
+		tabBar.Visible = false; resizeHandle.Visible = false
+		mainFrame:TweenSize(UDim2.new(0, normalSize.X.Offset, 0, 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+	else
+		minimizeBtn.Text = "-"
+		mainFrame:TweenSize(normalSize, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+		task.wait(0.2)
+		tabBar.Visible = true; resizeHandle.Visible = true
+		if btnTabEggs.BackgroundColor3 == Color3.fromRGB(60, 60, 60) then
+			scrollingEggs.Visible = true
+		elseif btnTabPumpkins.BackgroundColor3 == Color3.fromRGB(60, 60, 60) then
+			scrollingPumpkins.Visible = true
+		else
+			scrollingKalolo.Visible = true
+		end
+	end
+end)
+
+closeBtn.MouseButton1Click:Connect(function() fullCleanup() end)
+
+--// --- ESP 1: WILD EGGS (PERSISTENT & AUTO REMOVE) ---
+local function updateESPVisibility()
+	for model, espData in pairs(activeESPs) do
+		if model and model.Parent then
+			local eggName = espData.EggName
+			local isEnabled = (eggFilters[eggName] == true)
+			if espData.Highlight then espData.Highlight.Enabled = isEnabled end
+			if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+			if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+		end
+	end
+end
+
+local function createToggleUI(eggName)
+	if eggUiButtons[eggName] ~= nil then return end
+	if eggFilters[eggName] == nil then
+		eggFilters[eggName] = true
+	end
+
+	local eggColor = getEggColor(eggName)
+	local toggleButton = Instance.new("TextButton")
+	toggleButton.Size = UDim2.new(1, 0, 0, 32)
+	toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	toggleButton.Text = ""
+	toggleButton.AutoButtonColor = false
+	toggleButton.Parent = scrollingEggs
+	Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+	local checkIndicator = Instance.new("TextLabel")
+	checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+	checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+	checkIndicator.BackgroundTransparency = 1
+	checkIndicator.Text = eggFilters[eggName] and "✔" or ""
+	checkIndicator.TextColor3 = eggFilters[eggName] and eggColor or Color3.fromRGB(120, 120, 120)
+	checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+	checkIndicator.Parent = toggleButton
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -35, 1, 0)
+	nameLabel.Position = UDim2.new(0, 32, 0, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = tostring(eggName)
+	nameLabel.TextColor3 = eggFilters[eggName] and eggColor or Color3.fromRGB(120, 120, 120)
+	nameLabel.TextSize, nameLabel.Font = 13, Enum.Font.GothamBold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = toggleButton
+
+	toggleButton.MouseButton1Click:Connect(function()
+		eggFilters[eggName] = not eggFilters[eggName]
+		if eggFilters[eggName] then
+			checkIndicator.Text = "✔"
+			checkIndicator.TextColor3, nameLabel.TextColor3 = eggColor, eggColor
+		else
+			checkIndicator.Text = ""
+			checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+		end
+		updateESPVisibility()
+	end)
+
+	eggUiButtons[eggName] = toggleButton
+end
+
+local function addESP(model)
+	if activeESPs[model] then return end
+	if not model:IsA("Model") then return end
+
+	local eggName = model.Name
+	createToggleUI(eggName)
+
+	local eggColor = getEggColor(eggName)
+	local isEnabled = (eggFilters[eggName] == true)
+
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = model
+	highlight.FillColor = eggColor
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineTransparency = 0
+	highlight.Enabled = isEnabled
+	highlight.Parent = model
+
+	local targetPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	if not targetPart then
+		for _, desc in ipairs(model:GetDescendants()) do
+			if desc:IsA("BasePart") then targetPart = desc break end
+		end
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Adornee = targetPart
+	billboard.Size = UDim2.new(0, 120, 0, 40)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Enabled = isEnabled
+	billboard.Parent = model
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.TextColor3 = eggColor
+	textLabel.TextStrokeTransparency = 0.3
+	textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+	textLabel.Visible = isEnabled
+	textLabel.Parent = billboard
+
+	local renderConn
+	renderConn = RunService.RenderStepped:Connect(function()
+		if not model or not model.Parent or not targetPart then
+			if renderConn then renderConn:Disconnect() end
+			return
+		end
+		if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = player.Character.HumanoidRootPart
+			local distance = math.floor((hrp.Position - targetPart.Position).Magnitude)
+			textLabel.Text = eggName .. "\n[" .. distance .. "m]"
+		end
+	end)
+
+	activeESPs[model] = { Highlight = highlight, Billboard = billboard, TextLabel = textLabel, Connection = renderConn, EggName = eggName }
+end
+
+local function removeESP(model)
+	if activeESPs[model] then
+		local eggName = activeESPs[model].EggName
+		if activeESPs[model].Connection then activeESPs[model].Connection:Disconnect() end
+		if activeESPs[model].Highlight then activeESPs[model].Highlight:Destroy() end
+		if activeESPs[model].Billboard then activeESPs[model].Billboard:Destroy() end
+		activeESPs[model] = nil
+
+		local stillExists = false
+		for _, data in pairs(activeESPs) do
+			if data.EggName == eggName then stillExists = true break end
+		end
+
+		if not stillExists then
+			if eggUiButtons[eggName] then
+				eggUiButtons[eggName]:Destroy()
+				eggUiButtons[eggName] = nil
+			end
+		end
+	end
+end
+
+for _, child in ipairs(wildEggsFolder:GetChildren()) do addESP(child) end
+table.insert(activeConnections, wildEggsFolder.ChildAdded:Connect(function(child) task.wait(0.1); addESP(child) end))
+table.insert(activeConnections, wildEggsFolder.ChildRemoved:Connect(function(child) removeESP(child) end))
+
+
+--// --- ESP 2: ACTIVE PUMPKINS (PERSISTENT & AUTO REMOVE) ---
+local function updatePumpkinESPVisibility()
+	for model, espData in pairs(activePumpkinESPs) do
+		if model and model.Parent then
+			local pName = espData.PumpkinName
+			local isEnabled = (pumpkinFilters[pName] == true)
+			if espData.Highlight then espData.Highlight.Enabled = isEnabled end
+			if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+			if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+		end
+	end
+end
+
+local function addPumpkinESP(model)
+	if activePumpkinESPs[model] then return end
+	if not model:IsA("Model") then return end
+
+	local pName = model.Name
+	if pumpkinFilters[pName] == nil then
+		pumpkinFilters[pName] = true
+	end
+
+	local pumpkinColor = Color3.fromRGB(255, 140, 0)
+	local toggleButton = Instance.new("TextButton")
+	toggleButton.Size = UDim2.new(1, 0, 0, 32)
+	toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	toggleButton.Text = ""
+	toggleButton.AutoButtonColor = false
+	toggleButton.Parent = scrollingPumpkins
+	Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+	local checkIndicator = Instance.new("TextLabel")
+	checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+	checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+	checkIndicator.BackgroundTransparency = 1
+	checkIndicator.Text = pumpkinFilters[pName] and "✔" or ""
+	checkIndicator.TextColor3 = pumpkinFilters[pName] and pumpkinColor or Color3.fromRGB(120, 120, 120)
+	checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+	checkIndicator.Parent = toggleButton
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -35, 1, 0)
+	nameLabel.Position = UDim2.new(0, 32, 0, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = tostring(pName)
+	nameLabel.TextColor3 = pumpkinFilters[pName] and pumpkinColor or Color3.fromRGB(120, 120, 120)
+	nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = toggleButton
+
+	toggleButton.MouseButton1Click:Connect(function()
+		pumpkinFilters[pName] = not pumpkinFilters[pName]
+		if pumpkinFilters[pName] then
+			checkIndicator.Text = "✔"
+			checkIndicator.TextColor3, nameLabel.TextColor3 = pumpkinColor, pumpkinColor
+		else
+			checkIndicator.Text = ""
+			checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+		end
+		updatePumpkinESPVisibility()
+	end)
+
+	local isEnabled = (pumpkinFilters[pName] == true)
+
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = model
+	highlight.FillColor = pumpkinColor
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineTransparency = 0
+	highlight.Enabled = isEnabled
+	highlight.Parent = model
+
+	local targetPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	if not targetPart then
+		for _, desc in ipairs(model:GetDescendants()) do
+			if desc:IsA("BasePart") then targetPart = desc break end
+		end
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Adornee = targetPart
+	billboard.Size = UDim2.new(0, 120, 0, 40)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Enabled = isEnabled
+	billboard.Parent = model
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.TextColor3 = pumpkinColor
+	textLabel.TextStrokeTransparency = 0.3
+	textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+	textLabel.Visible = isEnabled
+	textLabel.Parent = billboard
+
+	local renderConn
+	renderConn = RunService.RenderStepped:Connect(function()
+		if not model or not model.Parent or not targetPart then
+			if renderConn then renderConn:Disconnect() end
+			return
+		end
+		if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = player.Character.HumanoidRootPart
+			local distance = math.floor((hrp.Position - targetPart.Position).Magnitude)
+			textLabel.Text = pName .. "\n[" .. distance .. "m]"
+		end
+	end)
+
+	activePumpkinESPs[model] = { Highlight = highlight, Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, PumpkinName = pName }
+end
+
+local function removePumpkinESP(model)
+	if activePumpkinESPs[model] then
+		if activePumpkinESPs[model].Connection then activePumpkinESPs[model].Connection:Disconnect() end
+		if activePumpkinESPs[model].Highlight then activePumpkinESPs[model].Highlight:Destroy() end
+		if activePumpkinESPs[model].Billboard then activePumpkinESPs[model].Billboard:Destroy() end
+		if activePumpkinESPs[model].UiButton then activePumpkinESPs[model].UiButton:Destroy() end
+		activePumpkinESPs[model] = nil
+	end
+end
+
+if successPumpkins and activePumpkinsFolder then
+	for _, child in ipairs(activePumpkinsFolder:GetChildren()) do addPumpkinESP(child) end
+	table.insert(activeConnections, activePumpkinsFolder.ChildAdded:Connect(function(child) task.wait(0.1); addPumpkinESP(child) end))
+	table.insert(activeConnections, activePumpkinsFolder.ChildRemoved:Connect(function(child) removePumpkinESP(child) end))
+end
+
+
+--// --- ESP 3: KING KALOLO EGG (DIPERBAIKI DENGAN NAMA "KingKalolo Egg") ---
+local function updateKaloloESPVisibility()
+	for model, espData in pairs(activeKaloloESPs) do
+		if model and model.Parent then
+			local kName = espData.KaloloName
+			local isEnabled = (kaloloFilters[kName] == true)
+			if espData.Highlight then espData.Highlight.Enabled = isEnabled end
+			if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+			if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+		end
+	end
+end
+
+local function addKaloloESP(model)
+	if activeKaloloESPs[model] then return end
+	if not model:IsA("Model") or model.Name ~= "KingKalolo Egg" then return end
+
+	local kName = model.Name
+	if kaloloFilters[kName] == nil then
+		kaloloFilters[kName] = true
+	end
+
+	local kaloloColor = Color3.fromRGB(170, 0, 255) -- Warna Ungu Keren untuk Boss/Kalolo
+	local toggleButton = Instance.new("TextButton")
+	toggleButton.Size = UDim2.new(1, 0, 0, 32)
+	toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+	toggleButton.Text = ""
+	toggleButton.AutoButtonColor = false
+	toggleButton.Parent = scrollingKalolo
+	Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+	local checkIndicator = Instance.new("TextLabel")
+	checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+	checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+	checkIndicator.BackgroundTransparency = 1
+	checkIndicator.Text = kaloloFilters[kName] and "✔" or ""
+	checkIndicator.TextColor3 = kaloloFilters[kName] and kaloloColor or Color3.fromRGB(120, 120, 120)
+	checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+	checkIndicator.Parent = toggleButton
+
+	local nameLabel = Instance.new("TextLabel")
+	nameLabel.Size = UDim2.new(1, -35, 1, 0)
+	nameLabel.Position = UDim2.new(0, 32, 0, 0)
+	nameLabel.BackgroundTransparency = 1
+	nameLabel.Text = tostring(kName)
+	nameLabel.TextColor3 = kaloloFilters[kName] and kaloloColor or Color3.fromRGB(120, 120, 120)
+	nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
+	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+	nameLabel.Parent = toggleButton
+
+	toggleButton.MouseButton1Click:Connect(function()
+		kaloloFilters[kName] = not kaloloFilters[kName]
+		if kaloloFilters[kName] then
+			checkIndicator.Text = "✔"
+			checkIndicator.TextColor3, nameLabel.TextColor3 = kaloloColor, kaloloColor
+		else
+			checkIndicator.Text = ""
+			checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+		end
+		updateKaloloESPVisibility()
+	end)
+
+	local isEnabled = (kaloloFilters[kName] == true)
+
+	local highlight = Instance.new("Highlight")
+	highlight.Adornee = model
+	highlight.FillColor = kaloloColor
+	highlight.OutlineColor = Color3.fromRGB(255, 255, 255)
+	highlight.FillTransparency = 0.5
+	highlight.OutlineTransparency = 0
+	highlight.Enabled = isEnabled
+	highlight.Parent = model
+
+	local targetPart = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
+	if not targetPart then
+		for _, desc in ipairs(model:GetDescendants()) do
+			if desc:IsA("BasePart") then targetPart = desc break end
+		end
+	end
+
+	local billboard = Instance.new("BillboardGui")
+	billboard.Adornee = targetPart
+	billboard.Size = UDim2.new(0, 120, 0, 40)
+	billboard.StudsOffset = Vector3.new(0, 3, 0)
+	billboard.AlwaysOnTop = true
+	billboard.Enabled = isEnabled
+	billboard.Parent = model
+
+	local textLabel = Instance.new("TextLabel")
+	textLabel.Size = UDim2.new(1, 0, 1, 0)
+	textLabel.BackgroundTransparency = 1
+	textLabel.TextColor3 = kaloloColor
+	textLabel.TextStrokeTransparency = 0.3
+	textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+	textLabel.Visible = isEnabled
+	textLabel.Parent = billboard
+
+	local renderConn
+	renderConn = RunService.RenderStepped:Connect(function()
+		if not model or not model.Parent or not targetPart then
+			if renderConn then renderConn:Disconnect() end
+			return
+		end
+		if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+			local hrp = player.Character.HumanoidRootPart
+			local distance = math.floor((hrp.Position - targetPart.Position).Magnitude)
+			textLabel.Text = kName .. "\n[" .. distance .. "m]"
+		end
+	end)
+
+	activeKaloloESPs[model] = { Highlight = highlight, Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, KaloloName = kName }
+end
+
+local function removeKaloloESP(model)
+	if activeKaloloESPs[model] then
+		if activeKaloloESPs[model].Connection then activeKaloloESPs[model].Connection:Disconnect() end
+		if activeKaloloESPs[model].Highlight then activeKaloloESPs[model].Highlight:Destroy() end
+		if activeKaloloESPs[model].Billboard then activeKaloloESPs[model].Billboard:Destroy() end
+		if activeKaloloESPs[model].UiButton then activeKaloloESPs[model].UiButton:Destroy() end
+		activeKaloloESPs[model] = nil
+	end
+end
+
+if successKalolo and kaloloBossFolder then
+	for _, desc in ipairs(kaloloBossFolder:GetDescendants()) do
+		if desc:IsA("Model") and desc.Name == "KingKalolo Egg" then
+			addKaloloESP(desc)
+		end
+	end
+	table.insert(activeConnections, kaloloBossFolder.DescendantAdded:Connect(function(desc)
+		if desc:IsA("Model") and desc.Name == "KingKalolo Egg" then
+			task.wait(0.1)
+			addKaloloESP(desc)
+		end
+	end))
+	table.insert(activeConnections, kaloloBossFolder.DescendantRemoving:Connect(function(desc)
+		if desc:IsA("Model") then
+			removeKaloloESP(desc)
+		end
+	end))
+end
