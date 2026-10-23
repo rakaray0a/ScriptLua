@@ -1,6 +1,6 @@
 --// Mencegah penumpukan skrip saat di-execute ulang (Aman untuk PC & Mobile Executor seperti Delta)
-if getgenv().WildPumpkinKaloloESPLoaded then
-	pcall(getgenv().WildPumpkinKaloloESPLoaded)
+if getgenv().MultiHubESPLoaded then
+	pcall(getgenv().MultiHubESPLoaded)
 end
 
 local Players = game:GetService("Players")
@@ -24,6 +24,10 @@ local successKalolo, kaloloBossFolder = pcall(function()
 	return Workspace:WaitForChild("KingKaloloBossRuntime")
 end)
 
+local successHome, billboardStats = pcall(function()
+	return Workspace:WaitForChild("Player Pot 1"):WaitForChild("BillboardStats")
+end)
+
 if not successEggs or not wildEggsFolder then
 	warn("Folder Workspace.EggRuntime.WildEggs tidak ditemukan!")
 	return
@@ -31,7 +35,7 @@ end
 
 --// Setup ScreenGui dengan Proteksi Executor
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "AllESPGui_Executor"
+screenGui.Name = "MultiHubESPGui_Executor"
 screenGui.ResetOnSpawn = false
 
 local successGui = pcall(function()
@@ -49,7 +53,7 @@ if not successGui then
 	screenGui.Parent = player:WaitForChild("PlayerGui")
 end
 
---// Tabel Filter Persisten & Status Teleport Master On/Off
+--// Tabel Filter Persisten & Status Master Teleport
 getgenv().PersistentEggFilters = getgenv().PersistentEggFilters or {}
 getgenv().PersistentPumpkinFilters = getgenv().PersistentPumpkinFilters or {}
 getgenv().PersistentKaloloFilters = getgenv().PersistentKaloloFilters or {}
@@ -104,22 +108,30 @@ local function fullCleanup()
 		screenGui:Destroy()
 	end
 end
-getgenv().WildPumpkinKaloloESPLoaded = fullCleanup
+getgenv().MultiHubESPLoaded = fullCleanup
 
---// Fungsi Helper Teleport yang Aman (Menggunakan PivotTo)
-local function teleportToModel(model)
-	if model and model.Parent and player.Character then
-		local success, err = pcall(function()
-			local cf = model:GetPivot()
-			player.Character:PivotTo(cf + Vector3.new(0, 3, 0))
-		end)
-		if not success then
-			-- Fallback jika PivotTo gagal
-			local part = model.PrimaryPart or model:FindFirstChildWhichIsA("BasePart")
-			if part and player.Character:FindFirstChild("HumanoidRootPart") then
-				player.Character.HumanoidRootPart.CFrame = part.CFrame + Vector3.new(0, 3, 0)
-			end
+--// Fungsi Helper Teleport yang Andal
+local function teleportToTarget(target)
+	local char = player.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	local targetCf = nil
+	if typeof(target) == "Instance" then
+		if target:IsA("Model") then
+			targetCf = target:GetPivot()
+		elseif target:IsA("BasePart") then
+			targetCf = target.CFrame
+		elseif target:IsA("Attachment") then
+			targetCf = target.WorldCFrame
 		end
+	elseif typeof(target) == "CFrame" then
+		targetCf = target
+	end
+
+	if targetCf then
+		hrp.CFrame = targetCf + Vector3.new(0, 3, 0)
 	end
 end
 
@@ -144,7 +156,7 @@ end
 
 --// --- PEMBUATAN UI UTAMA ---
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 260, 0, 330)
+mainFrame.Size = UDim2.new(0, 270, 0, 330)
 mainFrame.Position = UDim2.new(0, 50, 0, 150)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
@@ -177,7 +189,7 @@ local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, -70, 1, 0)
 titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Multi ESP Hub"
+titleLabel.Text = "Multi ESP & TP Hub"
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextSize = 13
 titleLabel.Font = Enum.Font.GothamBold
@@ -206,42 +218,34 @@ closeBtn.TextSize = 14
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.Parent = topBar
 
---// Tab Bar (3 Pilihan Menu: Wild Eggs, Pumpkins, KingKalolo)
+--// Tab Bar (4 Pilihan Menu: Eggs, Pumpkins, Kalolo, HOME)
 local tabBar = Instance.new("Frame")
 tabBar.Size = UDim2.new(1, -16, 0, 30)
 tabBar.Position = UDim2.new(0, 8, 0, 42)
 tabBar.BackgroundTransparency = 1
 tabBar.Parent = mainFrame
 
-local btnTabEggs = Instance.new("TextButton")
-btnTabEggs.Size = UDim2.new(0.32, 0, 1, 0)
-btnTabEggs.Position = UDim2.new(0, 0, 0, 0)
+local function createTabButton(text, posX, width)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.new(width, -2, 1, 0)
+	btn.Position = UDim2.new(posX, 0, 0, 0)
+	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+	btn.Text = text
+	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+	btn.TextSize, btn.Font = 10, Enum.Font.GothamBold
+	btn.Parent = tabBar
+	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+	return btn
+end
+
+local btnTabEggs = createTabButton("Eggs", 0, 0.25)
+local btnTabPumpkins = createTabButton("Pumpkins", 0.25, 0.25)
+local btnTabKalolo = createTabButton("Kalolo", 0.50, 0.25)
+local btnTabHome = createTabButton("HOME", 0.75, 0.25)
+
+-- Set default active tab
 btnTabEggs.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-btnTabEggs.Text = "Eggs"
 btnTabEggs.TextColor3 = Color3.fromRGB(255, 255, 255)
-btnTabEggs.TextSize, btnTabEggs.Font = 11, Enum.Font.GothamBold
-btnTabEggs.Parent = tabBar
-Instance.new("UICorner", btnTabEggs).CornerRadius = UDim.new(0, 6)
-
-local btnTabPumpkins = Instance.new("TextButton")
-btnTabPumpkins.Size = UDim2.new(0.32, 0, 1, 0)
-btnTabPumpkins.Position = UDim2.new(0.34, 0, 0, 0)
-btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-btnTabPumpkins.Text = "Pumpkins"
-btnTabPumpkins.TextColor3 = Color3.fromRGB(200, 200, 200)
-btnTabPumpkins.TextSize, btnTabPumpkins.Font = 11, Enum.Font.GothamBold
-btnTabPumpkins.Parent = tabBar
-Instance.new("UICorner", btnTabPumpkins).CornerRadius = UDim.new(0, 6)
-
-local btnTabKalolo = Instance.new("TextButton")
-btnTabKalolo.Size = UDim2.new(0.32, 0, 1, 0)
-btnTabKalolo.Position = UDim2.new(0.68, 0, 0, 0)
-btnTabKalolo.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-btnTabKalolo.Text = "Kalolo"
-btnTabKalolo.TextColor3 = Color3.fromRGB(200, 200, 200)
-btnTabKalolo.TextSize, btnTabKalolo.Font = 11, Enum.Font.GothamBold
-btnTabKalolo.Parent = tabBar
-Instance.new("UICorner", btnTabKalolo).CornerRadius = UDim.new(0, 6)
 
 --// ScrollingFrame untuk Wild Eggs
 local scrollingEggs = Instance.new("ScrollingFrame")
@@ -267,13 +271,8 @@ Instance.new("UICorner", masterEggTpBtn).CornerRadius = UDim.new(0, 6)
 
 masterEggTpBtn.MouseButton1Click:Connect(function()
 	getgenv().EggTPEnabled = not getgenv().EggTPEnabled
-	if getgenv().EggTPEnabled then
-		masterEggTpBtn.Text = "Teleport Feature: ON"
-		masterEggTpBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
-	else
-		masterEggTpBtn.Text = "Teleport Feature: OFF"
-		masterEggTpBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
-	end
+	masterEggTpBtn.Text = getgenv().EggTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+	masterEggTpBtn.TextColor3 = getgenv().EggTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
 end)
 
 --// ScrollingFrame untuk ActivePumpkins
@@ -300,13 +299,8 @@ Instance.new("UICorner", masterPumpkinTpBtn).CornerRadius = UDim.new(0, 6)
 
 masterPumpkinTpBtn.MouseButton1Click:Connect(function()
 	getgenv().PumpkinTPEnabled = not getgenv().PumpkinTPEnabled
-	if getgenv().PumpkinTPEnabled then
-		masterPumpkinTpBtn.Text = "Teleport Feature: ON"
-		masterPumpkinTpBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
-	else
-		masterPumpkinTpBtn.Text = "Teleport Feature: OFF"
-		masterPumpkinTpBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
-	end
+	masterPumpkinTpBtn.Text = getgenv().PumpkinTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+	masterPumpkinTpBtn.TextColor3 = getgenv().PumpkinTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
 end)
 
 --// ScrollingFrame untuk KingKalolo Egg
@@ -333,36 +327,68 @@ Instance.new("UICorner", masterKaloloTpBtn).CornerRadius = UDim.new(0, 6)
 
 masterKaloloTpBtn.MouseButton1Click:Connect(function()
 	getgenv().KaloloTPEnabled = not getgenv().KaloloTPEnabled
-	if getgenv().KaloloTPEnabled then
-		masterKaloloTpBtn.Text = "Teleport Feature: ON"
-		masterKaloloTpBtn.TextColor3 = Color3.fromRGB(0, 255, 128)
+	masterKaloloTpBtn.Text = getgenv().KaloloTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+	masterKaloloTpBtn.TextColor3 = getgenv().KaloloTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+end)
+
+--// Frame / Tab khusus untuk HOME
+local scrollingHome = Instance.new("ScrollingFrame")
+scrollingHome.Size = UDim2.new(1, -16, 1, -85)
+scrollingHome.Position = UDim2.new(0, 8, 0, 78)
+scrollingHome.BackgroundTransparency = 1
+scrollingHome.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingHome.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollingHome.ScrollBarThickness = 4
+scrollingHome.Visible = false
+scrollingHome.Parent = mainFrame
+local layoutHome = Instance.new("UIListLayout", scrollingHome); layoutHome.Padding = UDim.new(0, 6)
+
+local homeTpButton = Instance.new("TextButton")
+homeTpButton.Size = UDim2.new(1, 0, 0, 45)
+homeTpButton.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
+homeTpButton.Text = "TELEPORT TO HOME\n(BillboardStats)"
+homeTpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+homeTpButton.TextSize, homeTpButton.Font = 13, Enum.Font.GothamBold
+homeTpButton.Parent = scrollingHome
+Instance.new("UICorner", homeTpButton).CornerRadius = UDim.new(0, 6)
+
+homeTpButton.MouseButton1Click:Connect(function()
+	if successHome and billboardStats then
+		teleportToTarget(billboardStats)
 	else
-		masterKaloloTpBtn.Text = "Teleport Feature: OFF"
-		masterKaloloTpBtn.TextColor3 = Color3.fromRGB(180, 180, 180)
+		warn("Workspace.Player Pot 1.BillboardStats tidak ditemukan!")
 	end
 end)
 
 -- Fungsi Navigasi Tab
-btnTabEggs.MouseButton1Click:Connect(function()
-	scrollingEggs.Visible = true; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false
-	btnTabEggs.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnTabEggs.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabPumpkins.TextColor3 = Color3.fromRGB(200, 200, 200)
-	btnTabKalolo.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabKalolo.TextColor3 = Color3.fromRGB(200, 200, 200)
-end)
+local function switchTab(activeTab)
+	scrollingEggs.Visible = (activeTab == "Eggs")
+	scrollingPumpkins.Visible = (activeTab == "Pumpkins")
+	scrollingKalolo.Visible = (activeTab == "Kalolo")
+	scrollingHome.Visible = (activeTab == "HOME")
 
-btnTabPumpkins.MouseButton1Click:Connect(function()
-	scrollingEggs.Visible = false; scrollingPumpkins.Visible = true; scrollingKalolo.Visible = false
-	btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnTabPumpkins.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btnTabEggs.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabEggs.TextColor3 = Color3.fromRGB(200, 200, 200)
-	btnTabKalolo.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabKalolo.TextColor3 = Color3.fromRGB(200, 200, 200)
-end)
+	local tabs = {
+		{btn = btnTabEggs, name = "Eggs"},
+		{btn = btnTabPumpkins, name = "Pumpkins"},
+		{btn = btnTabKalolo, name = "Kalolo"},
+		{btn = btnTabHome, name = "HOME"}
+	}
 
-btnTabKalolo.MouseButton1Click:Connect(function()
-	scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = true
-	btnTabKalolo.BackgroundColor3 = Color3.fromRGB(60, 60, 60); btnTabKalolo.TextColor3 = Color3.fromRGB(255, 255, 255)
-	btnTabEggs.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabEggs.TextColor3 = Color3.fromRGB(200, 200, 200)
-	btnTabPumpkins.BackgroundColor3 = Color3.fromRGB(40, 40, 40); btnTabPumpkins.TextColor3 = Color3.fromRGB(200, 200, 200)
-end)
+	for _, t in ipairs(tabs) do
+		if t.name == activeTab then
+			t.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+			t.btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+		else
+			t.btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+			t.btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+		end
+	end
+end
+
+btnTabEggs.MouseButton1Click:Connect(function() switchTab("Eggs") end)
+btnTabPumpkins.MouseButton1Click:Connect(function() switchTab("Pumpkins") end)
+btnTabKalolo.MouseButton1Click:Connect(function() switchTab("Kalolo") end)
+btnTabHome.MouseButton1Click:Connect(function() switchTab("HOME") end)
 
 --// Resizer Handle (Pojok Kanan Bawah)
 local resizeHandle = Instance.new("TextButton")
@@ -412,7 +438,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
 	if isMinimized then
 		normalSize = mainFrame.Size
 		minimizeBtn.Text = "+"
-		scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false
+		scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false; scrollingHome.Visible = false
 		tabBar.Visible = false; resizeHandle.Visible = false
 		mainFrame:TweenSize(UDim2.new(0, normalSize.X.Offset, 0, 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
 	else
@@ -420,12 +446,10 @@ minimizeBtn.MouseButton1Click:Connect(function()
 		mainFrame:TweenSize(normalSize, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
 		task.wait(0.2)
 		tabBar.Visible = true; resizeHandle.Visible = true
-		if btnTabEggs.BackgroundColor3 == Color3.fromRGB(60, 60, 60) then
-			scrollingEggs.Visible = true
-		elseif btnTabPumpkins.BackgroundColor3 == Color3.fromRGB(60, 60, 60) then
-			scrollingPumpkins.Visible = true
+		if scrollingEggs.Visible or scrollingPumpkins.Visible or scrollingKalolo.Visible or scrollingHome.Visible then
+			-- biarkan tab aktif
 		else
-			scrollingKalolo.Visible = true
+			scrollingEggs.Visible = true
 		end
 	end
 end)
@@ -479,7 +503,6 @@ local function createToggleUI(eggName)
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Parent = toggleButton
 
-	-- Tombol TP untuk kategori Wild Eggs
 	local tpButton = Instance.new("TextButton")
 	tpButton.Size = UDim2.new(0, 45, 0, 22)
 	tpButton.Position = UDim2.new(1, -50, 0.5, -11)
@@ -492,10 +515,9 @@ local function createToggleUI(eggName)
 
 	tpButton.MouseButton1Click:Connect(function()
 		if getgenv().EggTPEnabled then
-			-- Cari salah satu model aktif yang sesuai dengan eggName ini
 			for model, data in pairs(activeESPs) do
 				if data.EggName == eggName and model and model.Parent then
-					teleportToModel(model)
+					teleportToTarget(model)
 					break
 				end
 			end
@@ -653,7 +675,6 @@ local function addPumpkinESP(model)
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Parent = toggleButton
 
-	-- Tombol Teleport (TP) per Pumpkin
 	local tpButton = Instance.new("TextButton")
 	tpButton.Size = UDim2.new(0, 45, 0, 22)
 	tpButton.Position = UDim2.new(1, -50, 0.5, -11)
@@ -666,7 +687,7 @@ local function addPumpkinESP(model)
 
 	tpButton.MouseButton1Click:Connect(function()
 		if getgenv().PumpkinTPEnabled then
-			teleportToModel(model)
+			teleportToTarget(model)
 		end
 	end)
 
@@ -800,7 +821,6 @@ local function addKaloloESP(model)
 	nameLabel.TextXAlignment = Enum.TextXAlignment.Left
 	nameLabel.Parent = toggleButton
 
-	-- Tombol TP untuk KingKalolo Egg
 	local tpButton = Instance.new("TextButton")
 	tpButton.Size = UDim2.new(0, 45, 0, 22)
 	tpButton.Position = UDim2.new(1, -50, 0.5, -11)
@@ -813,7 +833,7 @@ local function addKaloloESP(model)
 
 	tpButton.MouseButton1Click:Connect(function()
 		if getgenv().KaloloTPEnabled then
-			teleportToModel(model)
+			teleportToTarget(model)
 		end
 	end)
 
