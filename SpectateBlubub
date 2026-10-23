@@ -1,4 +1,4 @@
--- Executor Compatible Script (PC & Mobile / Delta)
+-- Infinite Yield Style Spectate Script (PC & Mobile / Delta)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -12,23 +12,24 @@ local TARGET_USERNAME = "pras_end12"
 
 -- State Variables
 local isSpectating = false
-local renderConnection = nil
+local spectateConnection = nil
 local originalSubject = nil
+local lastStreamTick = 0
 
 -- Safe GUI Parent for Executors
 local parentGui = (pcall(function() return CoreGui end) and CoreGui) or localPlayer:WaitForChild("PlayerGui")
 
 -- Hapus GUI lama jika script dieksekusi ulang
-if parentGui:FindFirstChild("SpectateControllerGui") then
-	parentGui.SpectateControllerGui:Destroy()
+if parentGui:FindFirstChild("IYStyleSpectateGui") then
+	parentGui.IYStyleSpectateGui:Destroy()
 end
 
 -- Create GUI Elements
 local screenGui = Instance.new("ScreenGui")
-screenGui.Name = "SpectateControllerGui"
+screenGui.Name = "IYStyleSpectateGui"
 screenGui.ResetOnSpawn = false
 
--- Lindungi GUI jika executor mendukung (untuk Delta / Synapse / dll)
+-- Lindungi GUI jika executor mendukung
 if syn and syn.protect_gui then
 	syn.protect_gui(screenGui)
 	screenGui.Parent = CoreGui
@@ -82,7 +83,7 @@ titleLabel.Size = UDim2.new(1, -70, 1, 0)
 titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "Spectate: " .. TARGET_USERNAME
+titleLabel.Text = "IY Spectate: " .. TARGET_USERNAME
 titleLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
 titleLabel.TextSize = 13
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -219,7 +220,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
---- LOGIC: SPECTATE & RENDER AREA FIX ---
+--- LOGIC: INFINITE YIELD STYLE SPECTATE & STREAMING RENDER ---
 local function getTargetCharacter()
 	local player = Players:FindFirstChild(TARGET_USERNAME)
 	if player and player.Character then
@@ -236,23 +237,24 @@ toggleBtn.MouseButton1Click:Connect(function()
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 80)
 		originalSubject = camera.CameraSubject
 		
-		renderConnection = RunService.RenderStepped:Connect(function()
+		spectateConnection = RunService.RenderStepped:Connect(function()
 			local targetChar = getTargetCharacter()
-			local localChar = localPlayer.Character
 			
 			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
 				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME
-				camera.CameraSubject = targetChar:FindFirstChildOfClass("Humanoid") or targetChar.PrimaryPart
 				
-				if localChar and localChar:FindFirstChild("HumanoidRootPart") then
-					local targetHRP = targetChar.HumanoidRootPart
-					local localHRP = localChar.HumanoidRootPart
-					
-					localHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 5, 0)
-					
-					if localChar:FindFirstChildOfClass("Humanoid") then
-						localChar:FindFirstChildOfClass("Humanoid").PlatformStand = true
-					end
+				-- Pindahkan POV Kamera ke target (Karakter lokal tetap diam di tempat)
+				local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
+				camera.CameraSubject = targetHumanoid or targetChar.PrimaryPart
+				
+				-- Paksa render area di sekitar target aktif jika game menggunakan StreamingEnabled
+				local currentTime = tick()
+				if currentTime - lastStreamTick > 0.5 then
+					lastStreamTick = currentTime
+					pcall(function()
+						local targetPos = targetChar.HumanoidRootPart.Position
+						localPlayer:RequestStreamAroundAsync(targetPos)
+					end)
 				end
 			else
 				statusLabel.Text = "Target tidak ditemukan di server!"
@@ -264,16 +266,17 @@ toggleBtn.MouseButton1Click:Connect(function()
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 		statusLabel.Text = "Spectate dimatikan."
 		
-		if renderConnection then
-			renderConnection:Disconnect()
-			renderConnection = nil
+		if spectateConnection then
+			spectateConnection:Disconnect()
+			spectateConnection = nil
 		end
 		
-		camera.CameraSubject = originalSubject or (localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid"))
-		
+		-- Kembalikan kamera ke player lokal
 		local localChar = localPlayer.Character
 		if localChar and localChar:FindFirstChildOfClass("Humanoid") then
-			localChar:FindFirstChildOfClass("Humanoid").PlatformStand = false
+			camera.CameraSubject = localChar:FindFirstChildOfClass("Humanoid")
+		else
+			camera.CameraSubject = originalSubject
 		end
 	end
 end)
