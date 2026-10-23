@@ -1,0 +1,279 @@
+-- Executor Compatible Script (PC & Mobile / Delta)
+local Players = game:GetService("Players")
+local RunService = game:GetService("RunService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local localPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
+local camera = workspace.CurrentCamera
+
+-- Target Spectate
+local TARGET_USERNAME = "pras_end12"
+
+-- State Variables
+local isSpectating = false
+local renderConnection = nil
+local originalSubject = nil
+
+-- Safe GUI Parent for Executors
+local parentGui = (pcall(function() return CoreGui end) and CoreGui) or localPlayer:WaitForChild("PlayerGui")
+
+-- Hapus GUI lama jika script dieksekusi ulang
+if parentGui:FindFirstChild("SpectateControllerGui") then
+	parentGui.SpectateControllerGui:Destroy()
+end
+
+-- Create GUI Elements
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "SpectateControllerGui"
+screenGui.ResetOnSpawn = false
+
+-- Lindungi GUI jika executor mendukung (untuk Delta / Synapse / dll)
+if syn and syn.protect_gui then
+	syn.protect_gui(screenGui)
+	screenGui.Parent = CoreGui
+elseif protectgui then
+	protectgui(screenGui)
+	screenGui.Parent = CoreGui
+else
+	screenGui.Parent = parentGui
+end
+
+-- Main Frame (Window)
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.new(0, 240, 0, 160)
+mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
+mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
+mainFrame.BorderSizePixel = 0
+mainFrame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = mainFrame
+
+local uiStroke = Instance.new("UIStroke")
+uiStroke.Color = Color3.fromRGB(60, 60, 70)
+uiStroke.Thickness = 2
+uiStroke.Parent = mainFrame
+
+-- Top Bar (Header for Dragging)
+local topBar = Instance.new("Frame")
+topBar.Name = "TopBar"
+topBar.Size = UDim2.new(1, 0, 0, 35)
+topBar.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+topBar.BorderSizePixel = 0
+topBar.Parent = mainFrame
+
+local topBarCorner = Instance.new("UICorner")
+topBarCorner.CornerRadius = UDim.new(0, 8)
+topBarCorner.Parent = topBar
+
+local fixCorner = Instance.new("Frame")
+fixCorner.Size = UDim2.new(1, 0, 0, 5)
+fixCorner.Position = UDim2.new(0, 0, 1, -5)
+fixCorner.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+fixCorner.BorderSizePixel = 0
+fixCorner.Parent = topBar
+
+-- Title
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -70, 1, 0)
+titleLabel.Position = UDim2.new(0, 10, 0, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.Text = "Spectate: " .. TARGET_USERNAME
+titleLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
+titleLabel.TextSize = 13
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = topBar
+
+-- Minimize Button
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Size = UDim2.new(0, 25, 0, 25)
+minimizeBtn.Position = UDim2.new(1, -55, 0.5, -12)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.TextSize = 14
+minimizeBtn.Parent = topBar
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minimizeBtn
+
+-- Content Frame
+local contentFrame = Instance.new("Frame")
+contentFrame.Name = "ContentFrame"
+contentFrame.Size = UDim2.new(1, 0, 1, -35)
+contentFrame.Position = UDim2.new(0, 0, 0, 35)
+contentFrame.BackgroundTransparency = 1
+contentFrame.Parent = mainFrame
+
+-- Toggle Button (ON/OFF)
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Size = UDim2.new(0.85, 0, 0, 45)
+toggleBtn.Position = UDim2.new(0.075, 0, 0.2, 0)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Text = "SPECTATE: OFF"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 14
+toggleBtn.Parent = contentFrame
+
+local btnCorner = Instance.new("UICorner")
+btnCorner.CornerRadius = UDim.new(0, 6)
+btnCorner.Parent = toggleBtn
+
+-- Status Label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, 0, 0, 20)
+statusLabel.Position = UDim2.new(0, 0, 0.7, 0)
+statusLabel.BackgroundTransparency = 1
+statusLabel.Font = Enum.Font.Gotham
+statusLabel.Text = "Target tidak ditemukan."
+statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
+statusLabel.TextSize = 11
+statusLabel.Parent = contentFrame
+
+-- Resize Handle
+local resizeHandle = Instance.new("TextButton")
+resizeHandle.Size = UDim2.new(0, 20, 0, 20)
+resizeHandle.Position = UDim2.new(1, -20, 1, -20)
+resizeHandle.BackgroundTransparency = 1
+resizeHandle.Text = "◢"
+resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 150)
+resizeHandle.TextSize = 14
+resizeHandle.Parent = mainFrame
+
+--- LOGIC: DRAGGING WINDOW (PC & MOBILE) ---
+local dragging, dragStart, startPos
+
+topBar.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		dragging = true
+		dragStart = input.Position
+		startPos = mainFrame.Position
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				dragging = false
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - dragStart
+		mainFrame.Position = UDim2.new(
+			startPos.X.Scale, 
+			startPos.X.Offset + delta.X, 
+			startPos.Y.Scale, 
+			startPos.Y.Offset + delta.Y
+		)
+	end
+end)
+
+--- LOGIC: RESIZING WINDOW (PC & MOBILE) ---
+local resizing, resizeStart, startSize
+
+resizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = true
+		resizeStart = input.Position
+		startSize = mainFrame.AbsoluteSize
+		
+		input.Changed:Connect(function()
+			if input.UserInputState == Enum.UserInputState.End then
+				resizing = false
+			end
+		end)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local delta = input.Position - resizeStart
+		local newWidth = math.clamp(startSize.X + delta.X, 200, 500)
+		local newHeight = math.clamp(startSize.Y + delta.Y, 120, 400)
+		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
+	end
+end)
+
+--- LOGIC: MINIMIZE / MAXIMIZE ---
+local isMinimized = false
+minimizeBtn.MouseButton1Click:Connect(function()
+	isMinimized = not isMinimized
+	if isMinimized then
+		minimizeBtn.Text = "+"
+		contentFrame.Visible = false
+		resizeHandle.Visible = false
+		mainFrame.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 35)
+	else
+		minimizeBtn.Text = "-"
+		contentFrame.Visible = true
+		resizeHandle.Visible = true
+		mainFrame.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 160)
+	end
+end)
+
+--- LOGIC: SPECTATE & RENDER AREA FIX ---
+local function getTargetCharacter()
+	local player = Players:FindFirstChild(TARGET_USERNAME)
+	if player and player.Character then
+		return player.Character
+	end
+	return nil
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+	isSpectating = not isSpectating
+	
+	if isSpectating then
+		toggleBtn.Text = "SPECTATE: ON"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 80)
+		originalSubject = camera.CameraSubject
+		
+		renderConnection = RunService.RenderStepped:Connect(function()
+			local targetChar = getTargetCharacter()
+			local localChar = localPlayer.Character
+			
+			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME
+				camera.CameraSubject = targetChar:FindFirstChildOfClass("Humanoid") or targetChar.PrimaryPart
+				
+				if localChar and localChar:FindFirstChild("HumanoidRootPart") then
+					local targetHRP = targetChar.HumanoidRootPart
+					local localHRP = localChar.HumanoidRootPart
+					
+					localHRP.CFrame = targetHRP.CFrame * CFrame.new(0, 5, 0)
+					
+					if localChar:FindFirstChildOfClass("Humanoid") then
+						localChar:FindFirstChildOfClass("Humanoid").PlatformStand = true
+					end
+				end
+			else
+				statusLabel.Text = "Target tidak ditemukan di server!"
+				camera.CameraSubject = originalSubject
+			end
+		end)
+	else
+		toggleBtn.Text = "SPECTATE: OFF"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		statusLabel.Text = "Spectate dimatikan."
+		
+		if renderConnection then
+			renderConnection:Disconnect()
+			renderConnection = nil
+		end
+		
+		camera.CameraSubject = originalSubject or (localPlayer.Character and localPlayer.Character:FindFirstChildOfClass("Humanoid"))
+		
+		local localChar = localPlayer.Character
+		if localChar and localChar:FindFirstChildOfClass("Humanoid") then
+			localChar:FindFirstChildOfClass("Humanoid").PlatformStand = false
+		end
+	end
+end)
