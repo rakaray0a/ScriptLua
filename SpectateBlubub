@@ -231,4 +231,56 @@ local function getTargetCharacter()
 end
 
 toggleBtn.MouseButton1Click:Connect(function()
-	isSpectating = not
+	isSpectating = not isSpectating
+	
+	if isSpectating then
+		toggleBtn.Text = "SPECTATE: ON"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 80)
+		originalCameraType = camera.CameraType
+		originalSubject = camera.CameraSubject
+		
+		camera.CameraType = Enum.CameraType.Scriptable
+		
+		spectateConnection = RunService.RenderStepped:Connect(function()
+			local targetChar = getTargetCharacter()
+			
+			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
+				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME
+				
+				local targetHRP = targetChar.HumanoidRootPart
+				
+				-- Mengatur posisi kamera tepat di belakang punggung karakter dan menghadap ke arah depan tujuan karakter
+				-- CFrame.new(0, 3, 10) menempatkan kamera 10 stud di belakang posisi karakter (Z positif belakang)
+				camera.CFrame = targetHRP.CFrame * CFrame.new(0, 3, 10)
+				
+				-- Paksa render area di sekitar target aktif
+				local currentTime = tick()
+				if currentTime - lastStreamTick > 0.5 then
+					lastStreamTick = currentTime
+					pcall(function()
+						localPlayer:RequestStreamAroundAsync(targetHRP.Position)
+					end)
+				end
+			else
+				statusLabel.Text = "Target tidak ditemukan di server!"
+			end
+		end)
+	else
+		toggleBtn.Text = "SPECTATE: OFF"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
+		statusLabel.Text = "Spectate dimatikan."
+		
+		if spectateConnection then
+			spectateConnection:Disconnect()
+			spectateConnection = nil
+		end
+		
+		camera.CameraType = originalCameraType
+		local localChar = localPlayer.Character
+		if localChar and localChar:FindFirstChildOfClass("Humanoid") then
+			camera.CameraSubject = localChar:FindFirstChildOfClass("Humanoid")
+		else
+			camera.CameraSubject = originalSubject
+		end
+	end
+end)
