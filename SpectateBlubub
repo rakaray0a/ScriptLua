@@ -1,4 +1,4 @@
--- Infinite Yield Style Spectate Script (PC & Mobile / Delta)
+-- Infinite Yield Style Spectate with Auto-Facing Camera (PC & Mobile / Delta)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -13,6 +13,7 @@ local TARGET_USERNAME = "pras_end12"
 -- State Variables
 local isSpectating = false
 local spectateConnection = nil
+local originalCameraType = camera.CameraType
 local originalSubject = nil
 local lastStreamTick = 0
 
@@ -220,7 +221,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
---- LOGIC: INFINITE YIELD STYLE SPECTATE & STREAMING RENDER ---
+--- LOGIC: AUTO-FOLLOW & FACING DIRECTION SPECTATE ---
 local function getTargetCharacter()
 	local player = Players:FindFirstChild(TARGET_USERNAME)
 	if player and player.Character then
@@ -235,7 +236,11 @@ toggleBtn.MouseButton1Click:Connect(function()
 	if isSpectating then
 		toggleBtn.Text = "SPECTATE: ON"
 		toggleBtn.BackgroundColor3 = Color3.fromRGB(50, 200, 80)
+		originalCameraType = camera.CameraType
 		originalSubject = camera.CameraSubject
+		
+		-- Ubah mode kamera ke Scriptable agar kita bisa mengatur posisi & arah hadapnya secara manual
+		camera.CameraType = Enum.CameraType.Scriptable
 		
 		spectateConnection = RunService.RenderStepped:Connect(function()
 			local targetChar = getTargetCharacter()
@@ -243,22 +248,22 @@ toggleBtn.MouseButton1Click:Connect(function()
 			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
 				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME
 				
-				-- Pindahkan POV Kamera ke target (Karakter lokal tetap diam di tempat)
-				local targetHumanoid = targetChar:FindFirstChildOfClass("Humanoid")
-				camera.CameraSubject = targetHumanoid or targetChar.PrimaryPart
+				local targetHRP = targetChar.HumanoidRootPart
 				
-				-- Paksa render area di sekitar target aktif jika game menggunakan StreamingEnabled
+				-- Mengatur posisi kamera di belakang karakter target dan mengikuti arah hadapnya (Facing Direction)
+				-- CFrame.new(0, 3, -10) mengatur jarak ke atas (3 stud) dan ke belakang (10 stud dari punggung target)
+				camera.CFrame = targetHRP.CFrame * CFrame.new(0, 3, -10) * CFrame.Angles(0, math.rad(180), 0)
+				
+				-- Paksa render area di sekitar target aktif (jika game menggunakan StreamingEnabled)
 				local currentTime = tick()
 				if currentTime - lastStreamTick > 0.5 then
 					lastStreamTick = currentTime
 					pcall(function()
-						local targetPos = targetChar.HumanoidRootPart.Position
-						localPlayer:RequestStreamAroundAsync(targetPos)
+						localPlayer:RequestStreamAroundAsync(targetHRP.Position)
 					end)
 				end
 			else
 				statusLabel.Text = "Target tidak ditemukan di server!"
-				camera.CameraSubject = originalSubject
 			end
 		end)
 	else
@@ -271,7 +276,8 @@ toggleBtn.MouseButton1Click:Connect(function()
 			spectateConnection = nil
 		end
 		
-		-- Kembalikan kamera ke player lokal
+		-- Kembalikan setting kamera seperti semula
+		camera.CameraType = originalCameraType
 		local localChar = localPlayer.Character
 		if localChar and localChar:FindFirstChildOfClass("Humanoid") then
 			camera.CameraSubject = localChar:FindFirstChildOfClass("Humanoid")
