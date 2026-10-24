@@ -1,0 +1,438 @@
+-- ==========================================
+-- CLEANUP SCRIPT LAMA (Anti-Duplicate)
+-- ==========================================
+if getgenv().TokenESPRunning then
+    getgenv().TokenESPRunning = false
+    task.wait(0.1)
+end
+
+getgenv().TokenESPRunning = true
+
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local Workspace = game:GetService("Workspace")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local UserInputService = game:GetService("UserInputService")
+
+local localPlayer = Players.LocalPlayer
+
+-- Simpan riwayat server yang sudah pernahijoinkan agar tidak lupa
+if not getgenv().JoinedServersList then
+    getgenv().JoinedServersList = {}
+end
+
+-- Hapus UI lama jika ada
+if CoreGui:FindFirstChild("TokenControllerGui") then
+    CoreGui.TokenControllerGui:Destroy()
+end
+
+-- ==========================================
+-- VARIABEL UTAMA & STATE
+-- ==========================================
+local activeTokens = Workspace:WaitForChild("ActiveTokens")
+local espEnabled = false
+local espCache = {}
+
+-- ==========================================
+-- MEMBUAT UI UTAMA
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "TokenControllerGui"
+screenGui.ResetOnSpawn = false
+pcall(function()
+    screenGui.Parent = CoreGui
+end)
+if not screenGui.Parent then
+    screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
+end
+
+-- Main Frame (Panel Utama ESP)
+local frame = Instance.new("Frame")
+frame.Size = UDim2.new(0, 200, 0, 150)
+frame.Position = UDim2.new(0, 100, 0, 100)
+frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Parent = screenGui
+
+local uiCorner = Instance.new("UICorner")
+uiCorner.CornerRadius = UDim.new(0, 8)
+uiCorner.Parent = frame
+
+local titleBar = Instance.new("TextLabel")
+titleBar.Size = UDim2.new(1, 0, 0, 30)
+titleBar.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+titleBar.TextColor3 = Color3.fromRGB(255, 255, 255)
+titleBar.Text = " Token Controller"
+titleBar.Font = Enum.Font.SourceSansBold
+titleBar.TextSize = 14
+titleBar.TextXAlignment = Enum.TextXAlignment.Left
+titleBar.Parent = frame
+
+local titleCorner = Instance.new("UICorner")
+titleCorner.CornerRadius = UDim.new(0, 8)
+titleCorner.Parent = titleBar
+
+local contentContainer = Instance.new("Frame")
+contentContainer.Size = UDim2.new(1, 0, 1, -30)
+contentContainer.Position = UDim2.new(0, 0, 0, 30)
+contentContainer.BackgroundTransparency = 1
+contentContainer.Parent = frame
+
+-- Status Label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(1, -20, 0, 20)
+statusLabel.Position = UDim2.new(0, 10, 0, 5)
+statusLabel.BackgroundTransparency = 1
+statusLabel.TextColor3 = Color3.fromRGB(0, 255, 255)
+statusLabel.Text = "Tokens Loaded: 0"
+statusLabel.Font = Enum.Font.SourceSansBold
+statusLabel.TextSize = 13
+statusLabel.TextXAlignment = Enum.TextXAlignment.Left
+statusLabel.Parent = contentContainer
+
+-- Tombol Toggle ESP
+local espButton = Instance.new("TextButton")
+espButton.Size = UDim2.new(1, -20, 0, 35)
+espButton.Position = UDim2.new(0, 10, 0, 30)
+espButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+espButton.Text = "ESP: OFF"
+espButton.Font = Enum.Font.SourceSansBold
+espButton.TextSize = 14
+espButton.Parent = contentContainer
+
+local espCorner = Instance.new("UICorner")
+espCorner.CornerRadius = UDim.new(0, 6)
+espCorner.Parent = espButton
+
+-- Tombol Buka Menu Server Hop
+local serverHopButton = Instance.new("TextButton")
+serverHopButton.Size = UDim2.new(1, -20, 0, 35)
+serverHopButton.Position = UDim2.new(0, 10, 0, 75)
+serverHopButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
+serverHopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+serverHopButton.Text = "Server Hop Menu"
+serverHopButton.Font = Enum.Font.SourceSansBold
+serverHopButton.TextSize = 14
+serverHopButton.Parent = contentContainer
+
+local hopCorner = Instance.new("UICorner")
+hopCorner.CornerRadius = UDim.new(0, 6)
+hopCorner.Parent = serverHopButton
+
+-- ==========================================
+-- MEMBUAT UI SERVER HOP (Menu Terpisah)
+-- ==========================================
+local hopFrame = Instance.new("Frame")
+hopFrame.Size = UDim2.new(0, 300, 0, 320)
+hopFrame.Position = UDim2.new(0, 320, 0, 100)
+hopFrame.BackgroundColor3 = Color3.fromRGB(25, 25, 25)
+hopFrame.BorderSizePixel = 0
+hopFrame.Visible = false
+hopFrame.Active = true
+hopFrame.Parent = screenGui
+
+local hopCornerMain = Instance.new("UICorner")
+hopCornerMain.CornerRadius = UDim.new(0, 8)
+hopCornerMain.Parent = hopFrame
+
+local hopTitle = Instance.new("TextLabel")
+hopTitle.Size = UDim2.new(1, 0, 0, 30)
+hopTitle.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+hopTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
+hopTitle.Text = " Server Hop Selector"
+hopTitle.Font = Enum.Font.SourceSansBold
+hopTitle.TextSize = 14
+hopTitle.TextXAlignment = Enum.TextXAlignment.Left
+hopTitle.Parent = hopFrame
+
+local hopTitleCorner = Instance.new("UICorner")
+hopTitleCorner.CornerRadius = UDim.new(0, 8)
+hopTitleCorner.Parent = hopTitle
+
+-- Tombol Refresh Daftar Server
+local refreshButton = Instance.new("TextButton")
+refreshButton.Size = UDim2.new(0, 120, 0, 30)
+refreshButton.Position = UDim2.new(0, 10, 0, 40)
+refreshButton.BackgroundColor3 = Color3.fromRGB(0, 120, 0)
+refreshButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+refreshButton.Text = "Refresh Servers"
+refreshButton.Font = Enum.Font.SourceSansBold
+refreshButton.TextSize = 13
+refreshButton.Parent = hopFrame
+
+local refCorner = Instance.new("UICorner")
+refCorner.CornerRadius = UDim.new(0, 6)
+refCorner.Parent = refreshButton
+
+-- Tombol Tutup Menu Server Hop
+local closeHopButton = Instance.new("TextButton")
+closeHopButton.Size = UDim2.new(0, 30, 0, 30)
+closeHopButton.Position = UDim2.new(1, -35, 0, 40)
+closeHopButton.BackgroundColor3 = Color3.fromRGB(180, 0, 0)
+closeHopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+closeHopButton.Text = "X"
+closeHopButton.Font = Enum.Font.SourceSansBold
+closeHopButton.TextSize = 14
+closeHopButton.Parent = hopFrame
+
+local closeCorner = Instance.new("UICorner")
+closeCorner.CornerRadius = UDim.new(0, 6)
+closeCorner.Parent = closeHopButton
+
+-- Scrolling Frame untuk Daftar Server
+local serverScroll = Instance.new("ScrollingFrame")
+serverScroll.Size = UDim2.new(1, -20, 1, -85)
+serverScroll.Position = UDim2.new(0, 10, 0, 75)
+serverScroll.BackgroundTransparency = 1
+serverScroll.CanvasSize = UDim2.new(0, 0, 0, 0)
+serverScroll.ScrollBarThickness = 6
+serverScroll.Parent = hopFrame
+
+local uiListLayout = Instance.new("UIListLayout")
+uiListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+uiListLayout.Padding = UDim.new(0, 5)
+uiListLayout.Parent = serverScroll
+
+-- Tombol Minimize Utama (-)
+local minButton = Instance.new("TextButton")
+minButton.Size = UDim2.new(0, 30, 0, 30)
+minButton.Position = UDim2.new(1, -35, 0, 0)
+minButton.BackgroundTransparency = 1
+minButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+minButton.Text = "-"
+minButton.Font = Enum.Font.SourceSansBold
+minButton.TextSize = 18
+minButton.Parent = frame
+
+local floatIcon = Instance.new("TextButton")
+floatIcon.Size = UDim2.new(0, 40, 0, 40)
+floatIcon.Position = UDim2.new(0, 50, 0, 50)
+floatIcon.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+floatIcon.TextColor3 = Color3.fromRGB(0, 255, 255)
+floatIcon.Text = "TK"
+floatIcon.Font = Enum.Font.SourceSansBold
+floatIcon.TextSize = 14
+floatIcon.Visible = false
+floatIcon.Parent = screenGui
+
+local floatCorner = Instance.new("UICorner")
+floatCorner.CornerRadius = UDim.new(1, 0)
+floatCorner.Parent = floatIcon
+
+-- ==========================================
+-- LOGIKA UI DRAG (Bisa Digeser)
+-- ==========================================
+local function makeDraggable(topbar, container)
+    local dragging, dragStart, startPos
+    topbar.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true
+            dragStart = input.Position
+            startPos = container.Position
+            input.Changed:Connect(function()
+                if input.UserInputState == Enum.UserInputState.End then
+                    dragging = false
+                end
+            end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            container.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+        end
+    end)
+end
+
+makeDraggable(titleBar, frame)
+makeDraggable(hopTitle, hopFrame)
+
+-- Minimize Logic
+local isMinimized = false
+minButton.MouseButton1Click:Connect(function()
+    isMinimized = not isMinimized
+    contentContainer.Visible = not isMinimized
+    frame.Size = isMinimized and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 200, 0, 150)
+    floatIcon.Visible = isMinimized
+    frame.Visible = not isMinimized
+end)
+
+floatIcon.MouseButton1Click:Connect(function()
+    isMinimized = false
+    contentContainer.Visible = true
+    frame.Size = UDim2.new(0, 200, 0, 150)
+    floatIcon.Visible = false
+    frame.Visible = true
+end)
+
+serverHopButton.MouseButton1Click:Connect(function()
+    hopFrame.Visible = not hopFrame.Visible
+end)
+
+closeHopButton.MouseButton1Click:Connect(function()
+    hopFrame.Visible = false
+end)
+
+-- ==========================================
+-- LOGIKA ESP (BillboardGui)
+-- ==========================================
+local function addESP(model)
+    if espCache[model] then return end
+    
+    local billboard = Instance.new("BillboardGui")
+    billboard.Name = "TokenESP"
+    billboard.Size = UDim2.new(0, 100, 0, 40)
+    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
+    billboard.AlwaysOnTop = true
+    billboard.Adornee = model
+    
+    local textLabel = Instance.new("TextLabel")
+    textLabel.Size = UDim2.new(1, 0, 1, 0)
+    textLabel.BackgroundTransparency = 1
+    textLabel.Text = "TOKEN"
+    textLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+    textLabel.TextSize = 16
+    textLabel.Font = Enum.Font.SourceSansBold
+    textLabel.TextStrokeTransparency = 0
+    textLabel.TextStrokeColor3 = Color3.fromRGB(0, 0, 0)
+    textLabel.Parent = billboard
+    
+    pcall(function()
+        billboard.Parent = CoreGui
+    end)
+    if not billboard.Parent then
+        billboard.Parent = localPlayer:WaitForChild("PlayerGui")
+    end
+    
+    espCache[model] = billboard
+end
+
+local function removeESP(model)
+    if espCache[model] then
+        espCache[model]:Destroy()
+        espCache[model] = nil
+    end
+end
+
+local function clearAllESP()
+    for model, _ in pairs(espCache) do
+        removeESP(model)
+    end
+end
+
+task.spawn(function()
+    while getgenv().TokenESPRunning do
+        local count = 0
+        for _, child in ipairs(activeTokens:GetChildren()) do
+            if child:IsA("Model") then 
+                count = count + 1 
+                if espEnabled and not espCache[child] then
+                    addESP(child)
+                end
+            end
+        end
+        statusLabel.Text = "Tokens Loaded: " .. count
+        task.wait(0.5)
+    end
+end)
+
+espButton.MouseButton1Click:Connect(function()
+    espEnabled = not espEnabled
+    if espEnabled then
+        espButton.Text = "ESP: ON"
+        espButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+        for _, child in ipairs(activeTokens:GetChildren()) do
+            if child:IsA("Model") then addESP(child) end
+        end
+    else
+        espButton.Text = "ESP: OFF"
+        espButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+        clearAllESP()
+    end
+end)
+
+activeTokens.ChildAdded:Connect(function(child)
+    if child:IsA("Model") and espEnabled then
+        task.wait(0.05)
+        addESP(child)
+    end
+end)
+
+activeTokens.ChildRemoved:Connect(function(child)
+    if child:IsA("Model") then removeESP(child) end
+end)
+
+-- ==========================================
+-- LOGIKA SERVER HOP & TANDAI RIWAYAT SERVER
+-- ==========================================
+local function loadServerList()
+    -- Bersihkan list lama
+    for _, child in ipairs(serverScroll:GetChildren()) do
+        if child:IsA("TextButton") then
+            child:Destroy()
+        end
+    end
+    
+    local success, result = pcall(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+    
+    if success and result and result.data then
+        local yPos = 0
+        for _, server in ipairs(result.data) do
+            if server.id ~= game.JobId and server.playing < server.maxPlayers then
+                local isJoined = table.find(getgenv().JoinedServersList, server.id) ~= nil
+                
+                local sButton = Instance.new("TextButton")
+                sButton.Size = UDim2.new(1, -5, 0, 35)
+                sButton.BackgroundColor3 = isJoined and Color3.fromRGB(50, 50, 50) or Color3.fromRGB(40, 40, 40)
+                sButton.TextColor3 = isJoined and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(255, 255, 255)
+                
+                local statusText = isJoined and " [Sudah Dijoinkan]" or ""
+                sButton.Text = " Pemain: " .. server.playing .. "/" .. server.maxPlayers .. statusText
+                sButton.Font = Enum.Font.SourceSans
+                sButton.TextSize = 13
+                sButton.TextXAlignment = Enum.TextXAlignment.Left
+                sButton.Parent = serverScroll
+                
+                local sCorner = Instance.new("UICorner")
+                sCorner.CornerRadius = UDim.new(0, 4)
+                sCorner.Parent = sButton
+                
+                -- Event saat server dipilih untuk join
+                sButton.MouseButton1Click:Connect(function()
+                    if not table.find(getgenv().JoinedServersList, server.id) then
+                        table.insert(getgenv().JoinedServersList, server.id)
+                    end
+                    sButton.Text = " Menghubungkan..."
+                    sButton.BackgroundColor3 = Color3.fromRGB(0, 100, 0)
+                    
+                    TeleportService:TeleportToPlaceInstance(game.PlaceId, server.id, localPlayer)
+                end)
+                
+                yPos = yPos + 40
+            end
+        end
+        serverScroll.CanvasSize = UDim2.new(0, 0, 0, yPos)
+    else
+        local errLabel = Instance.new("TextLabel")
+        errLabel.Size = UDim2.new(1, 0, 0, 30)
+        errLabel.BackgroundTransparency = 1
+        errLabel.TextColor3 = Color3.fromRGB(255, 80, 80)
+        errLabel.Text = "Gagal memuat daftar server!"
+        errLabel.Font = Enum.Font.SourceSans
+        errLabel.TextSize = 13
+        errLabel.Parent = serverScroll
+    end
+end
+
+refreshButton.MouseButton1Click:Connect(function()
+    loadServerList()
+end)
+
+-- Panggil pertama kali saat menu dibuka
+loadServerList()
