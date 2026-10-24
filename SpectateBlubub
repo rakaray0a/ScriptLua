@@ -1,4 +1,4 @@
--- Infinite Yield Style Spectate with Zoom Feature (PC & Mobile / Delta)
+-- Infinite Yield Style Spectate with Integrated UI Zoom Controls (PC & Mobile / Delta)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -17,10 +17,10 @@ local originalCameraType = camera.CameraType
 local originalSubject = nil
 local lastStreamTick = 0
 
--- Zoom Configuration
-local currentZoom = 10 -- Jarak default kamera dari punggung (studs)
-local minZoom = 4      -- Zoom paling dekat
-local maxZoom = 30     -- Zoom paling jauh
+-- Zoom Settings
+local currentZoom = 10 -- Jarak awal kamera (studs)
+local minZoom = 4      -- Jarak terdekat
+local maxZoom = 40     -- Jarak terjauh
 
 -- Safe GUI Parent for Executors
 local parentGui = (pcall(function() return CoreGui end) and CoreGui) or localPlayer:WaitForChild("PlayerGui")
@@ -35,7 +35,7 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "IYStyleSpectateGui"
 screenGui.ResetOnSpawn = false
 
--- Lindungi GUI jika executor mendukung
+-- Protection for Executors
 if syn and syn.protect_gui then
 	syn.protect_gui(screenGui)
 	screenGui.Parent = CoreGui
@@ -49,7 +49,7 @@ end
 -- Main Frame (Window)
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 240, 0, 190) -- Dipertinggi sedikit untuk tombol zoom mobile
+mainFrame.Size = UDim2.new(0, 250, 0, 200)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 mainFrame.BorderSizePixel = 0
@@ -120,43 +120,60 @@ contentFrame.Parent = mainFrame
 
 -- Toggle Button (ON/OFF)
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.85, 0, 0, 40)
-toggleBtn.Position = UDim2.new(0.075, 0, 0.1, 0)
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 40)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.08, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.Text = "SPECTATE: OFF"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextSize = 14
+toggleBtn.TextSize = 13
 toggleBtn.Parent = contentFrame
 
 local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = toggleBtn
 
--- Zoom Control Buttons (Khusus HP / Delta)
+-- Zoom Panel UI (Tombol + & -)
+local zoomContainer = Instance.new("Frame")
+zoomContainer.Name = "ZoomContainer"
+zoomContainer.Size = UDim2.new(0.9, 0, 0, 35)
+zoomContainer.Position = UDim2.new(0.05, 0, 0.38, 0)
+zoomContainer.BackgroundTransparency = 1
+zoomContainer.Parent = contentFrame
+
 local zoomOutBtn = Instance.new("TextButton")
-zoomOutBtn.Size = UDim2.new(0.4, 0, 0, 30)
-zoomOutBtn.Position = UDim2.new(0.075, 0, 0.45, 0)
-zoomOutBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+zoomOutBtn.Size = UDim2.new(0.28, 0, 1, 0)
+zoomOutBtn.Position = UDim2.new(0, 0, 0, 0)
+zoomOutBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
 zoomOutBtn.Font = Enum.Font.GothamBold
 zoomOutBtn.Text = "Zoom -"
 zoomOutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 zoomOutBtn.TextSize = 12
-zoomOutBtn.Parent = contentFrame
+zoomOutBtn.Parent = zoomContainer
 
 local zOutCorner = Instance.new("UICorner")
 zOutCorner.CornerRadius = UDim.new(0, 6)
 zOutCorner.Parent = zoomOutBtn
 
+local zoomLabel = Instance.new("TextLabel")
+zoomLabel.Size = UDim2.new(0.4, 0, 1, 0)
+zoomLabel.Position = UDim2.new(0.3, 0, 0, 0)
+zoomLabel.BackgroundTransparency = 1
+zoomLabel.Font = Enum.Font.GothamBold
+zoomLabel.Text = "Zoom: " .. currentZoom
+zoomLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
+zoomLabel.TextSize = 12
+zoomLabel.Parent = zoomContainer
+
 local zoomInBtn = Instance.new("TextButton")
-zoomInBtn.Size = UDim2.new(0.4, 0, 0, 30)
-zoomInBtn.Position = UDim2.new(0.525, 0, 0.45, 0)
-zoomInBtn.BackgroundColor3 = Color3.fromRGB(60, 60, 70)
+zoomInBtn.Size = UDim2.new(0.28, 0, 1, 0)
+zoomInBtn.Position = UDim2.new(0.72, 0, 0, 0)
+zoomInBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
 zoomInBtn.Font = Enum.Font.GothamBold
 zoomInBtn.Text = "Zoom +"
 zoomInBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
 zoomInBtn.TextSize = 12
-zoomInBtn.Parent = contentFrame
+zoomInBtn.Parent = zoomContainer
 
 local zInCorner = Instance.new("UICorner")
 zInCorner.CornerRadius = UDim.new(0, 6)
@@ -183,7 +200,7 @@ resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 150)
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
---- LOGIC: DRAGGING WINDOW (PC & MOBILE) ---
+--- LOGIC: DRAGGING WINDOW ---
 local dragging, dragStart, startPos
 
 topBar.InputBegan:Connect(function(input)
@@ -212,7 +229,7 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
---- LOGIC: RESIZING WINDOW (PC & MOBILE) ---
+--- LOGIC: RESIZING WINDOW ---
 local resizing, resizeStart, startSize
 
 resizeHandle.InputBegan:Connect(function(input)
@@ -232,8 +249,8 @@ end)
 UserInputService.InputChanged:Connect(function(input)
 	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - resizeStart
-		local newWidth = math.clamp(startSize.X + delta.X, 200, 500)
-		local newHeight = math.clamp(startSize.Y + delta.Y, 140, 400)
+		local newWidth = math.clamp(startSize.X + delta.X, 220, 500)
+		local newHeight = math.clamp(startSize.Y + delta.Y, 160, 400)
 		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
 	end
 end)
@@ -251,26 +268,33 @@ minimizeBtn.MouseButton1Click:Connect(function()
 		minimizeBtn.Text = "-"
 		contentFrame.Visible = true
 		resizeHandle.Visible = true
-		mainFrame.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 190)
+		mainFrame.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 200)
 	end
 end)
 
---- LOGIC: ZOOM IN / ZOOM OUT (PC Scroll & Mobile Buttons) ---
+--- LOGIC: ZOOM FUNCTIONS ---
+local function updateZoom(amount)
+	currentZoom = math.clamp(currentZoom + amount, minZoom, maxZoom)
+	zoomLabel.Text = "Zoom: " .. math.floor(currentZoom)
+end
+
+-- Scroll Wheel di PC
 UserInputService.InputChanged:Connect(function(input)
 	if isSpectating and input.UserInputType == Enum.UserInputType.MouseWheel then
-		currentZoom = math.clamp(currentZoom - (input.Position.Z * 2), minZoom, maxZoom)
+		updateZoom(-input.Position.Z * 2)
 	end
 end)
 
+-- Tombol UI Zoom + dan Zoom -
 zoomInBtn.MouseButton1Click:Connect(function()
-	currentZoom = math.clamp(currentZoom - 2, minZoom, maxZoom)
+	updateZoom(-2)
 end)
 
 zoomOutBtn.MouseButton1Click:Connect(function()
-	currentZoom = math.clamp(currentZoom + 2, minZoom, maxZoom)
+	updateZoom(2)
 end)
 
---- LOGIC: SPECTATE LOOP WITH DYNAMIC ZOOM ---
+--- LOGIC: SPECTATE MAIN LOOP ---
 local function getTargetCharacter()
 	local player = Players:FindFirstChild(TARGET_USERNAME)
 	if player and player.Character then
@@ -294,15 +318,15 @@ toggleBtn.MouseButton1Click:Connect(function()
 			local targetChar = getTargetCharacter()
 			
 			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
-				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME .. " (Zoom: " .. math.floor(currentZoom) .. ")"
+				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME
 				
 				local targetHRP = targetChar.HumanoidRootPart
 				
-				-- Kamera mengikuti posisi target berdasarkan nilai variabel currentZoom
+				-- Kamera diposisikan di belakang punggung target sesuai nilai currentZoom
 				local camPosition = targetHRP.Position - (targetHRP.CFrame.LookVector * currentZoom) + Vector3.new(0, 3, 0)
 				camera.CFrame = CFrame.new(camPosition, targetHRP.Position + Vector3.new(0, 2, 0))
 				
-				-- Paksa render area di sekitar target aktif
+				-- Request Streaming area sekitar target
 				local currentTime = tick()
 				if currentTime - lastStreamTick > 0.5 then
 					lastStreamTick = currentTime
