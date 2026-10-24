@@ -1,4 +1,4 @@
--- Infinite Yield Style Spectate with Behind-Character Camera (PC & Mobile / Delta)
+-- Infinite Yield Style Spectate (Fixed Behind-Character Camera)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -221,7 +221,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
 	end
 end)
 
---- LOGIC: AUTO-FOLLOW BEHIND CHARACTER SPECTATE ---
+--- LOGIC: TRUE BEHIND-CHARACTER SPECTATE ---
 local function getTargetCharacter()
 	local player = Players:FindFirstChild(TARGET_USERNAME)
 	if player and player.Character then
@@ -249,9 +249,11 @@ toggleBtn.MouseButton1Click:Connect(function()
 				
 				local targetHRP = targetChar.HumanoidRootPart
 				
-				-- Mengatur posisi kamera tepat di belakang punggung karakter dan menghadap ke arah depan tujuan karakter
-				-- CFrame.new(0, 3, 10) menempatkan kamera 10 stud di belakang posisi karakter (Z positif belakang)
-				camera.CFrame = targetHRP.CFrame * CFrame.new(0, 3, 10)
+				-- Posisi kamera dipaksa berada di belakang punggung karakter (-10 stud pada sumbu Z lokal)
+				local camPosition = targetHRP.Position - (targetHRP.CFrame.LookVector * 10) + Vector3.new(0, 3, 0)
+				
+				-- Kamera melihat ke arah karakter target
+				camera.CFrame = CFrame.new(camPosition, targetHRP.Position + Vector3.new(0, 2, 0))
 				
 				-- Paksa render area di sekitar target aktif
 				local currentTime = tick()
