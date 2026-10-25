@@ -14,10 +14,11 @@ local Workspace = game:GetService("Workspace")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
 local UserInputService = game:GetService("UserInputService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local localPlayer = Players.LocalPlayer
 
--- Simpan riwayat server yang sudah pernahijoinkan agar tidak lupa
+-- Simpan riwayat server yang sudah pernah dijoinkan
 if not getgenv().JoinedServersList then
     getgenv().JoinedServersList = {}
 end
@@ -32,6 +33,7 @@ end
 -- ==========================================
 local activeTokens = Workspace:WaitForChild("ActiveTokens")
 local espEnabled = false
+local antiAfkEnabled = false
 local espCache = {}
 
 -- ==========================================
@@ -47,9 +49,9 @@ if not screenGui.Parent then
     screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 end
 
--- Main Frame (Panel Utama ESP)
+-- Main Frame (Diperbesar sedikit untuk menampung tombol Anti-AFK)
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 200, 0, 150)
+frame.Size = UDim2.new(0, 200, 0, 195)
 frame.Position = UDim2.new(0, 100, 0, 100)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
@@ -94,7 +96,7 @@ statusLabel.Parent = contentContainer
 
 -- Tombol Toggle ESP
 local espButton = Instance.new("TextButton")
-espButton.Size = UDim2.new(1, -20, 0, 35)
+espButton.Size = UDim2.new(1, -20, 0, 32)
 espButton.Position = UDim2.new(0, 10, 0, 30)
 espButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 espButton.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -107,10 +109,25 @@ local espCorner = Instance.new("UICorner")
 espCorner.CornerRadius = UDim.new(0, 6)
 espCorner.Parent = espButton
 
+-- Tombol Toggle Anti-AFK
+local afkButton = Instance.new("TextButton")
+afkButton.Size = UDim2.new(1, -20, 0, 32)
+afkButton.Position = UDim2.new(0, 10, 0, 68)
+afkButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+afkButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+afkButton.Text = "Anti-AFK: OFF"
+afkButton.Font = Enum.Font.SourceSansBold
+afkButton.TextSize = 14
+afkButton.Parent = contentContainer
+
+local afkCorner = Instance.new("UICorner")
+afkCorner.CornerRadius = UDim.new(0, 6)
+afkCorner.Parent = afkButton
+
 -- Tombol Buka Menu Server Hop
 local serverHopButton = Instance.new("TextButton")
-serverHopButton.Size = UDim2.new(1, -20, 0, 35)
-serverHopButton.Position = UDim2.new(0, 10, 0, 75)
+serverHopButton.Size = UDim2.new(1, -20, 0, 32)
+serverHopButton.Position = UDim2.new(0, 10, 0, 106)
 serverHopButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 serverHopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 serverHopButton.Text = "Server Hop Menu"
@@ -255,7 +272,7 @@ local isMinimized = false
 minButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     contentContainer.Visible = not isMinimized
-    frame.Size = isMinimized and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 200, 0, 150)
+    frame.Size = isMinimized and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 200, 0, 195)
     floatIcon.Visible = isMinimized
     frame.Visible = not isMinimized
 end)
@@ -263,7 +280,7 @@ end)
 floatIcon.MouseButton1Click:Connect(function()
     isMinimized = false
     contentContainer.Visible = true
-    frame.Size = UDim2.new(0, 200, 0, 150)
+    frame.Size = UDim2.new(0, 200, 0, 195)
     floatIcon.Visible = false
     frame.Visible = true
 end)
@@ -274,6 +291,28 @@ end)
 
 closeHopButton.MouseButton1Click:Connect(function()
     hopFrame.Visible = false
+end)
+
+-- ==========================================
+-- LOGIKA ANTI-AFK
+-- ==========================================
+localPlayer.Idled:Connect(function()
+    if antiAfkEnabled then
+        VirtualUser:Button2Down(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+        task.wait(1)
+        VirtualUser:Button2Up(Vector2.new(0, 0), Workspace.CurrentCamera.CFrame)
+    end
+end)
+
+afkButton.MouseButton1Click:Connect(function()
+    antiAfkEnabled = not antiAfkEnabled
+    if antiAfkEnabled then
+        afkButton.Text = "Anti-AFK: ON"
+        afkButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    else
+        afkButton.Text = "Anti-AFK: OFF"
+        afkButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end
 end)
 
 -- ==========================================
@@ -369,7 +408,6 @@ end)
 -- LOGIKA SERVER HOP & TANDAI RIWAYAT SERVER
 -- ==========================================
 local function loadServerList()
-    -- Bersihkan list lama
     for _, child in ipairs(serverScroll:GetChildren()) do
         if child:IsA("TextButton") then
             child:Destroy()
@@ -403,7 +441,6 @@ local function loadServerList()
                 sCorner.CornerRadius = UDim.new(0, 4)
                 sCorner.Parent = sButton
                 
-                -- Event saat server dipilih untuk join
                 sButton.MouseButton1Click:Connect(function()
                     if not table.find(getgenv().JoinedServersList, server.id) then
                         table.insert(getgenv().JoinedServersList, server.id)
@@ -434,5 +471,4 @@ refreshButton.MouseButton1Click:Connect(function()
     loadServerList()
 end)
 
--- Panggil pertama kali saat menu dibuka
 loadServerList()
