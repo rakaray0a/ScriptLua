@@ -1,4 +1,4 @@
--- Infinite Yield Style Spectate with Integrated UI Zoom Controls (PC & Mobile / Delta)
+-- Infinite Yield Style Spectate with Dynamic Player Dropdown (PC & Mobile / Delta)
 local Players = game:GetService("Players")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
@@ -7,8 +7,9 @@ local CoreGui = game:GetService("CoreGui")
 local localPlayer = Players.LocalPlayer or Players.PlayerAdded:Wait()
 local camera = workspace.CurrentCamera
 
--- Target Spectate
+-- Target Spectate Default
 local TARGET_USERNAME = "pras_end12"
+local selectedTargetPlayer = nil
 
 -- State Variables
 local isSpectating = false
@@ -18,14 +19,13 @@ local originalSubject = nil
 local lastStreamTick = 0
 
 -- Zoom Settings
-local currentZoom = 10 -- Jarak awal kamera (studs)
-local minZoom = 4      -- Jarak terdekat
-local maxZoom = 40     -- Jarak terjauh
+local currentZoom = 10
+local minZoom = 4
+local maxZoom = 40
 
 -- Safe GUI Parent for Executors
 local parentGui = (pcall(function() return CoreGui end) and CoreGui) or localPlayer:WaitForChild("PlayerGui")
 
--- Hapus GUI lama jika script dieksekusi ulang
 if parentGui:FindFirstChild("IYStyleSpectateGui") then
 	parentGui.IYStyleSpectateGui:Destroy()
 end
@@ -35,7 +35,6 @@ local screenGui = Instance.new("ScreenGui")
 screenGui.Name = "IYStyleSpectateGui"
 screenGui.ResetOnSpawn = false
 
--- Protection for Executors
 if syn and syn.protect_gui then
 	syn.protect_gui(screenGui)
 	screenGui.Parent = CoreGui
@@ -49,7 +48,7 @@ end
 -- Main Frame (Window)
 local mainFrame = Instance.new("Frame")
 mainFrame.Name = "MainFrame"
-mainFrame.Size = UDim2.new(0, 250, 0, 200)
+mainFrame.Size = UDim2.new(0, 260, 0, 240)
 mainFrame.Position = UDim2.new(0.05, 0, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 35)
 mainFrame.BorderSizePixel = 0
@@ -89,7 +88,7 @@ titleLabel.Size = UDim2.new(1, -70, 1, 0)
 titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
 titleLabel.Font = Enum.Font.GothamBold
-titleLabel.Text = "IY Spectate: " .. TARGET_USERNAME
+titleLabel.Text = "IY Spectate Menu"
 titleLabel.TextColor3 = Color3.fromRGB(240, 240, 240)
 titleLabel.TextSize = 13
 titleLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -118,37 +117,71 @@ contentFrame.Position = UDim2.new(0, 0, 0, 35)
 contentFrame.BackgroundTransparency = 1
 contentFrame.Parent = mainFrame
 
+-- Dropdown Selection Button (Menampilkan Player Terpilih)
+local dropdownBtn = Instance.new("TextButton")
+dropdownBtn.Size = UDim2.new(0.9, 0, 0, 35)
+dropdownBtn.Position = UDim2.new(0.05, 0, 0.05, 0)
+dropdownBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 55)
+dropdownBtn.Font = Enum.Font.GothamBold
+dropdownBtn.Text = "Target: " .. TARGET_USERNAME
+dropdownBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+dropdownBtn.TextSize = 12
+dropdownBtn.Parent = contentFrame
+
+local dropCorner = Instance.new("UICorner")
+dropCorner.CornerRadius = UDim.new(0, 6)
+dropCorner.Parent = dropdownBtn
+
+-- Dropdown Scrolling List (Daftar Player)
+local dropdownList = Instance.new("ScrollingFrame")
+dropdownList.Size = UDim2.new(0.9, 0, 0, 90)
+dropdownList.Position = UDim2.new(0.05, 0, 0.22, 0)
+dropdownList.BackgroundColor3 = Color3.fromRGB(35, 35, 40)
+dropdownList.BorderSizePixel = 0
+dropdownList.Visible = false
+dropdownList.CanvasSize = UDim2.new(0, 0, 0, 0)
+dropdownList.AutomaticCanvasSize = Enum.AutomaticSize.Y
+dropdownList.ScrollBarThickness = 4
+dropdownList.Parent = contentFrame
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = dropdownList
+
+local listCorner = Instance.new("UICorner")
+listCorner.CornerRadius = UDim.new(0, 6)
+listCorner.Parent = dropdownList
+
 -- Toggle Button (ON/OFF)
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.9, 0, 0, 40)
-toggleBtn.Position = UDim2.new(0.05, 0, 0.08, 0)
+toggleBtn.Size = UDim2.new(0.9, 0, 0, 35)
+toggleBtn.Position = UDim2.new(0.05, 0, 0.48, 0)
 toggleBtn.BackgroundColor3 = Color3.fromRGB(200, 50, 50)
 toggleBtn.Font = Enum.Font.GothamBold
 toggleBtn.Text = "SPECTATE: OFF"
 toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.TextSize = 13
+toggleBtn.TextSize = 12
 toggleBtn.Parent = contentFrame
 
 local btnCorner = Instance.new("UICorner")
 btnCorner.CornerRadius = UDim.new(0, 6)
 btnCorner.Parent = toggleBtn
 
--- Zoom Panel UI (Tombol + & -)
+-- Zoom Panel UI
 local zoomContainer = Instance.new("Frame")
 zoomContainer.Name = "ZoomContainer"
-zoomContainer.Size = UDim2.new(0.9, 0, 0, 35)
-zoomContainer.Position = UDim2.new(0.05, 0, 0.38, 0)
+zoomContainer.Size = UDim2.new(0.9, 0, 0, 30)
+zoomContainer.Position = UDim2.new(0.05, 0, 0.68, 0)
 zoomContainer.BackgroundTransparency = 1
 zoomContainer.Parent = contentFrame
 
 local zoomOutBtn = Instance.new("TextButton")
 zoomOutBtn.Size = UDim2.new(0.28, 0, 1, 0)
-zoomOutBtn.Position = UDim2.new(0, 0, 0, 0)
 zoomOutBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
 zoomOutBtn.Font = Enum.Font.GothamBold
 zoomOutBtn.Text = "Zoom -"
 zoomOutBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-zoomOutBtn.TextSize = 12
+zoomOutBtn.TextSize = 11
 zoomOutBtn.Parent = zoomContainer
 
 local zOutCorner = Instance.new("UICorner")
@@ -162,7 +195,7 @@ zoomLabel.BackgroundTransparency = 1
 zoomLabel.Font = Enum.Font.GothamBold
 zoomLabel.Text = "Zoom: " .. currentZoom
 zoomLabel.TextColor3 = Color3.fromRGB(220, 220, 220)
-zoomLabel.TextSize = 12
+zoomLabel.TextSize = 11
 zoomLabel.Parent = zoomContainer
 
 local zoomInBtn = Instance.new("TextButton")
@@ -172,7 +205,7 @@ zoomInBtn.BackgroundColor3 = Color3.fromRGB(50, 50, 60)
 zoomInBtn.Font = Enum.Font.GothamBold
 zoomInBtn.Text = "Zoom +"
 zoomInBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-zoomInBtn.TextSize = 12
+zoomInBtn.TextSize = 11
 zoomInBtn.Parent = zoomContainer
 
 local zInCorner = Instance.new("UICorner")
@@ -182,10 +215,10 @@ zInCorner.Parent = zoomInBtn
 -- Status Label
 local statusLabel = Instance.new("TextLabel")
 statusLabel.Size = UDim2.new(1, 0, 0, 20)
-statusLabel.Position = UDim2.new(0, 0, 0.75, 0)
+statusLabel.Position = UDim2.new(0, 0, 0.88, 0)
 statusLabel.BackgroundTransparency = 1
 statusLabel.Font = Enum.Font.Gotham
-statusLabel.Text = "Target tidak ditemukan."
+statusLabel.Text = "Pilih target player."
 statusLabel.TextColor3 = Color3.fromRGB(180, 180, 180)
 statusLabel.TextSize = 11
 statusLabel.Parent = contentFrame
@@ -200,7 +233,49 @@ resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 150)
 resizeHandle.TextSize = 14
 resizeHandle.Parent = mainFrame
 
---- LOGIC: DRAGGING WINDOW ---
+--- LOGIC: POPULATE PLAYER DROPDOWN ---
+local function updatePlayerList()
+	for _, child in pairs(dropdownList:GetChildren()) do
+		if child:IsA("TextButton") then
+			child:Destroy()
+		end
+	end
+	
+	for _, player in pairs(Players:GetPlayers()) do
+		if player ~= localPlayer then
+			local pBtn = Instance.new("TextButton")
+			pBtn.Size = UDim2.new(1, 0, 0, 28)
+			pBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 50)
+			pBtn.BorderSizePixel = 0
+			pBtn.Font = Enum.Font.Gotham
+			pBtn.Text = player.Name
+			pBtn.TextColor3 = Color3.fromRGB(240, 240, 240)
+			pBtn.TextSize = 12
+			pBtn.Parent = dropdownList
+			
+			pBtn.MouseButton1Click:Connect(function()
+				selectedTargetPlayer = player
+				TARGET_USERNAME = player.Name
+				dropdownBtn.Text = "Target: " .. TARGET_USERNAME
+				dropdownList.Visible = false
+			end)
+		end
+	end
+end
+
+Players.PlayerAdded:Connect(updatePlayerList)
+Players.PlayerRemoving:Connect(updatePlayerList)
+updatePlayerList()
+
+-- Set Default Target jika ada
+selectedTargetPlayer = Players:FindFirstChild(TARGET_USERNAME)
+
+dropdownBtn.MouseButton1Click:Connect(function()
+	updatePlayerList()
+	dropdownList.Visible = not dropdownList.Visible
+end)
+
+--- LOGIC: DRAGGING & RESIZING WINDOW ---
 local dragging, dragStart, startPos
 
 topBar.InputBegan:Connect(function(input)
@@ -229,7 +304,6 @@ UserInputService.InputChanged:Connect(function(input)
 	end
 end)
 
---- LOGIC: RESIZING WINDOW ---
 local resizing, resizeStart, startSize
 
 resizeHandle.InputBegan:Connect(function(input)
@@ -249,8 +323,8 @@ end)
 UserInputService.InputChanged:Connect(function(input)
 	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
 		local delta = input.Position - resizeStart
-		local newWidth = math.clamp(startSize.X + delta.X, 220, 500)
-		local newHeight = math.clamp(startSize.Y + delta.Y, 160, 400)
+		local newWidth = math.clamp(startSize.X + delta.X, 240, 500)
+		local newHeight = math.clamp(startSize.Y + delta.Y, 200, 400)
 		mainFrame.Size = UDim2.new(0, newWidth, 0, newHeight)
 	end
 end)
@@ -259,6 +333,7 @@ end)
 local isMinimized = false
 minimizeBtn.MouseButton1Click:Connect(function()
 	isMinimized = not isMinimized
+	dropdownList.Visible = false
 	if isMinimized then
 		minimizeBtn.Text = "+"
 		contentFrame.Visible = false
@@ -268,7 +343,7 @@ minimizeBtn.MouseButton1Click:Connect(function()
 		minimizeBtn.Text = "-"
 		contentFrame.Visible = true
 		resizeHandle.Visible = true
-		mainFrame.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 200)
+		mainFrame.Size = UDim2.new(0, mainFrame.AbsoluteSize.X, 0, 240)
 	end
 end)
 
@@ -278,33 +353,19 @@ local function updateZoom(amount)
 	zoomLabel.Text = "Zoom: " .. math.floor(currentZoom)
 end
 
--- Scroll Wheel di PC
 UserInputService.InputChanged:Connect(function(input)
 	if isSpectating and input.UserInputType == Enum.UserInputType.MouseWheel then
 		updateZoom(-input.Position.Z * 2)
 	end
 end)
 
--- Tombol UI Zoom + dan Zoom -
-zoomInBtn.MouseButton1Click:Connect(function()
-	updateZoom(-2)
-end)
-
-zoomOutBtn.MouseButton1Click:Connect(function()
-	updateZoom(2)
-end)
+zoomInBtn.MouseButton1Click:Connect(function() updateZoom(-2) end)
+zoomOutBtn.MouseButton1Click:Connect(function() updateZoom(2) end)
 
 --- LOGIC: SPECTATE MAIN LOOP ---
-local function getTargetCharacter()
-	local player = Players:FindFirstChild(TARGET_USERNAME)
-	if player and player.Character then
-		return player.Character
-	end
-	return nil
-end
-
 toggleBtn.MouseButton1Click:Connect(function()
 	isSpectating = not isSpectating
+	dropdownList.Visible = false
 	
 	if isSpectating then
 		toggleBtn.Text = "SPECTATE: ON"
@@ -315,18 +376,16 @@ toggleBtn.MouseButton1Click:Connect(function()
 		camera.CameraType = Enum.CameraType.Scriptable
 		
 		spectateConnection = RunService.RenderStepped:Connect(function()
-			local targetChar = getTargetCharacter()
+			local targetPlayer = Players:FindFirstChild(TARGET_USERNAME)
+			local targetChar = targetPlayer and targetPlayer.Character
 			
 			if targetChar and targetChar:FindFirstChild("HumanoidRootPart") then
 				statusLabel.Text = "Status: Menonton " .. TARGET_USERNAME
 				
 				local targetHRP = targetChar.HumanoidRootPart
-				
-				-- Kamera diposisikan di belakang punggung target sesuai nilai currentZoom
 				local camPosition = targetHRP.Position - (targetHRP.CFrame.LookVector * currentZoom) + Vector3.new(0, 3, 0)
 				camera.CFrame = CFrame.new(camPosition, targetHRP.Position + Vector3.new(0, 2, 0))
 				
-				-- Request Streaming area sekitar target
 				local currentTime = tick()
 				if currentTime - lastStreamTick > 0.5 then
 					lastStreamTick = currentTime
@@ -335,7 +394,7 @@ toggleBtn.MouseButton1Click:Connect(function()
 					end)
 				end
 			else
-				statusLabel.Text = "Target tidak ditemukan di server!"
+				statusLabel.Text = "Target tidak ditemukan / keluar server!"
 			end
 		end)
 	else
