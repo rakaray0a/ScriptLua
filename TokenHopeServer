@@ -1,4 +1,13 @@
 -- ==========================================
+-- AUTO-EXECUTE ON TELEPORT / SERVER HOP
+-- ==========================================
+pcall(function()
+    if queue_on_teleport then
+        queue_on_teleport(syn and syn.queue_on_teleport or queue_on_teleport, game:HttpGet("KODE_SCRIPT_ANDA_DI_SINI"))
+    end
+end)
+
+-- ==========================================
 -- CLEANUP SCRIPT LAMA (Anti-Duplicate)
 -- ==========================================
 if getgenv().TokenESPRunning then
@@ -18,9 +27,14 @@ local VirtualUser = game:GetService("VirtualUser")
 
 local localPlayer = Players.LocalPlayer
 
--- Simpan riwayat server yang sudah pernah dijoinkan
+-- Simpan riwayat server yang sudah pernah dijoinkan agar tetap tersimpan saat hop
 if not getgenv().JoinedServersList then
     getgenv().JoinedServersList = {}
+end
+
+-- Masukkan JobId server saat ini ke riwayat agar otomatis tertandai
+if not table.find(getgenv().JoinedServersList, game.JobId) then
+    table.insert(getgenv().JoinedServersList, game.JobId)
 end
 
 -- Hapus UI lama jika ada
@@ -34,6 +48,8 @@ end
 local activeTokens = Workspace:WaitForChild("ActiveTokens")
 local espEnabled = false
 local antiAfkEnabled = false
+local teleportEnabled = false
+local teleportDelay = 2.0 -- Default delay teleport adalah 1 detik[cite: 1]
 local espCache = {}
 
 -- ==========================================
@@ -49,9 +65,9 @@ if not screenGui.Parent then
     screenGui.Parent = localPlayer:WaitForChild("PlayerGui")
 end
 
--- Main Frame (Diperbesar sedikit untuk menampung tombol Anti-AFK)
+-- Main Frame (Panel Utama)
 local frame = Instance.new("Frame")
-frame.Size = UDim2.new(0, 200, 0, 195)
+frame.Size = UDim2.new(0, 220, 0, 275)
 frame.Position = UDim2.new(0, 100, 0, 100)
 frame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 frame.BorderSizePixel = 0
@@ -109,10 +125,57 @@ local espCorner = Instance.new("UICorner")
 espCorner.CornerRadius = UDim.new(0, 6)
 espCorner.Parent = espButton
 
+-- Tombol Toggle Teleport
+local tpButton = Instance.new("TextButton")
+tpButton.Size = UDim2.new(1, -20, 0, 32)
+tpButton.Position = UDim2.new(0, 10, 0, 68)
+tpButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+tpButton.Text = "Teleport: OFF"
+tpButton.Font = Enum.Font.SourceSansBold
+tpButton.TextSize = 14
+tpButton.Parent = contentContainer
+
+local tpCorner = Instance.new("UICorner")
+tpCorner.CornerRadius = UDim.new(0, 6)
+tpCorner.Parent = tpButton
+
+-- Label & Kontrol Pengatur Delay Teleport (Speed Adjuster)
+local delayLabel = Instance.new("TextLabel")
+delayLabel.Size = UDim2.new(1, -20, 0, 20)
+delayLabel.Position = UDim2.new(0, 10, 0, 105)
+delayLabel.BackgroundTransparency = 1
+delayLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+delayLabel.Text = "TP Delay: 1.0s"
+delayLabel.Font = Enum.Font.SourceSansBold
+delayLabel.TextSize = 12
+delayLabel.TextXAlignment = Enum.TextXAlignment.Left
+delayLabel.Parent = contentContainer
+
+local minusBtn = Instance.new("TextButton")
+minusBtn.Size = UDim2.new(0, 45, 0, 25)
+minusBtn.Position = UDim2.new(0, 10, 0, 128)
+minusBtn.BackgroundColor3 = Color3.fromRGB(80, 40, 40)
+minusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minusBtn.Text = "- 0.2s"
+minusBtn.Font = Enum.Font.SourceSansBold
+minusBtn.TextSize = 12
+minusBtn.Parent = contentContainer
+
+local plusBtn = Instance.new("TextButton")
+plusBtn.Size = UDim2.new(0, 45, 0, 25)
+plusBtn.Position = UDim2.new(1, -55, 0, 128)
+plusBtn.BackgroundColor3 = Color3.fromRGB(40, 80, 40)
+plusBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+plusBtn.Text = "+ 0.2s"
+plusBtn.Font = Enum.Font.SourceSansBold
+plusBtn.TextSize = 12
+plusBtn.Parent = contentContainer
+
 -- Tombol Toggle Anti-AFK
 local afkButton = Instance.new("TextButton")
 afkButton.Size = UDim2.new(1, -20, 0, 32)
-afkButton.Position = UDim2.new(0, 10, 0, 68)
+afkButton.Position = UDim2.new(0, 10, 0, 160)
 afkButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 afkButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 afkButton.Text = "Anti-AFK: OFF"
@@ -120,14 +183,10 @@ afkButton.Font = Enum.Font.SourceSansBold
 afkButton.TextSize = 14
 afkButton.Parent = contentContainer
 
-local afkCorner = Instance.new("UICorner")
-afkCorner.CornerRadius = UDim.new(0, 6)
-afkCorner.Parent = afkButton
-
 -- Tombol Buka Menu Server Hop
 local serverHopButton = Instance.new("TextButton")
 serverHopButton.Size = UDim2.new(1, -20, 0, 32)
-serverHopButton.Position = UDim2.new(0, 10, 0, 106)
+serverHopButton.Position = UDim2.new(0, 10, 0, 198)
 serverHopButton.BackgroundColor3 = Color3.fromRGB(70, 130, 180)
 serverHopButton.TextColor3 = Color3.fromRGB(255, 255, 255)
 serverHopButton.Text = "Server Hop Menu"
@@ -240,7 +299,7 @@ floatCorner.CornerRadius = UDim.new(1, 0)
 floatCorner.Parent = floatIcon
 
 -- ==========================================
--- LOGIKA UI DRAG (Bisa Digeser)
+-- LOGIKA UI DRAG & MINIMIZE
 -- ==========================================
 local function makeDraggable(topbar, container)
     local dragging, dragStart, startPos
@@ -267,12 +326,11 @@ end
 makeDraggable(titleBar, frame)
 makeDraggable(hopTitle, hopFrame)
 
--- Minimize Logic
 local isMinimized = false
 minButton.MouseButton1Click:Connect(function()
     isMinimized = not isMinimized
     contentContainer.Visible = not isMinimized
-    frame.Size = isMinimized and UDim2.new(0, 200, 0, 30) or UDim2.new(0, 200, 0, 195)
+    frame.Size = isMinimized and UDim2.new(0, 220, 0, 30) or UDim2.new(0, 220, 0, 275)
     floatIcon.Visible = isMinimized
     frame.Visible = not isMinimized
 end)
@@ -280,7 +338,7 @@ end)
 floatIcon.MouseButton1Click:Connect(function()
     isMinimized = false
     contentContainer.Visible = true
-    frame.Size = UDim2.new(0, 200, 0, 195)
+    frame.Size = UDim2.new(0, 220, 0, 275)
     floatIcon.Visible = false
     frame.Visible = true
 end)
@@ -291,6 +349,58 @@ end)
 
 closeHopButton.MouseButton1Click:Connect(function()
     hopFrame.Visible = false
+end)
+
+-- ==========================================
+-- LOGIKA PENGATUR DELAY TELEPORT (SPEED)
+-- ==========================================
+minusBtn.MouseButton1Click:Connect(function()
+    teleportDelay = math.clamp(teleportDelay - 0.2, 0.2, 5.0)
+    delayLabel.Text = string.format("TP Delay: %.1fs", teleportDelay)
+end)
+
+plusBtn.MouseButton1Click:Connect(function()
+    teleportDelay = math.clamp(teleportDelay + 0.2, 0.2, 5.0)
+    delayLabel.Text = string.format("TP Delay: %.1fs", teleportDelay)
+end)
+
+-- ==========================================
+-- LOGIKA TELEPORT KE TOKEN
+-- ==========================================
+tpButton.MouseButton1Click:Connect(function()
+    teleportEnabled = not teleportEnabled
+    if teleportEnabled then
+        tpButton.Text = "Teleport: ON"
+        tpButton.BackgroundColor3 = Color3.fromRGB(0, 170, 0)
+    else
+        tpButton.Text = "Teleport: OFF"
+        tpButton.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+    end
+end)
+
+task.spawn(function()
+    while getgenv().TokenESPRunning do
+        if teleportEnabled then
+            local char = localPlayer.Character
+            local rootPart = char and char:FindFirstChild("HumanoidRootPart")
+            
+            if rootPart then
+                for _, child in ipairs(activeTokens:GetChildren()) do
+                    if not teleportEnabled or not getgenv().TokenESPRunning then break end
+                    if child:IsA("Model") then
+                        local success, pivot = pcall(function()
+                            return child:GetPivot()
+                        end)
+                        if success and pivot then
+                            rootPart.CFrame = pivot + Vector3.new(0, 3, 0)
+                            task.wait(teleportDelay)
+                        end
+                    end
+                end
+            end
+        end
+        task.wait(0.5)
+    end
 end)
 
 -- ==========================================
