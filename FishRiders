@@ -1,6 +1,6 @@
 --// Mencegah penumpukan skrip saat di-execute ulang (Aman untuk PC & Mobile Executor seperti Delta)
 if getgenv().MultiHubESPLoaded then
-	pcall(getgenv().MultiHubESPLoaded)
+    pcall(getgenv().MultiHubESPLoaded)
 end
 
 local Players = game:GetService("Players")
@@ -8,6 +8,9 @@ local Workspace = game:GetService("Workspace")
 local RunService = game:GetService("RunService")
 local UserInputService = game:GetService("UserInputService")
 local CoreGui = game:GetService("CoreGui")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualUser = game:GetService("VirtualUser") -- Ditambahkan untuk Anti-AFK
 
 local player = Players.LocalPlayer
 local camera = Workspace.CurrentCamera
@@ -18,28 +21,52 @@ screenGui.Name = "MultiHubESPGui_Executor"
 screenGui.ResetOnSpawn = false
 
 local successGui = pcall(function()
-	if syn and syn.protect_gui then
-		syn.protect_gui(screenGui)
-		screenGui.Parent = CoreGui
-	elseif protectgui then
-		protectgui(screenGui)
-		screenGui.Parent = CoreGui
-	else
-		screenGui.Parent = player:WaitForChild("PlayerGui")
-	end
+    if syn and syn.protect_gui then
+        syn.protect_gui(screenGui)
+        screenGui.Parent = CoreGui
+    elseif protectgui then
+        protectgui(screenGui)
+        screenGui.Parent = CoreGui
+    else
+        screenGui.Parent = player:WaitForChild("PlayerGui")
+    end
 end)
 if not successGui then
-	screenGui.Parent = player:WaitForChild("PlayerGui")
+    screenGui.Parent = player:WaitForChild("PlayerGui")
+end
+
+--// Sistem Penyimpanan Riwayat Server Hop
+local visitedFileName = "MultiHub_VisitedServers.json"
+local function loadVisited()
+    if isfile and readfile and isfile(visitedFileName) then
+        local success, result = pcall(function() return HttpService:JSONDecode(readfile(visitedFileName)) end)
+        if success and type(result) == "table" then return result end
+    end
+    return {}
+end
+local function saveVisited(tbl)
+    if writefile then
+        pcall(function() writefile(visitedFileName, HttpService:JSONEncode(tbl)) end)
+    end
 end
 
 --// Global State & Persistent Filters
 getgenv().PersistentEggFilters = getgenv().PersistentEggFilters or {}
 getgenv().PersistentPumpkinFilters = getgenv().PersistentPumpkinFilters or {}
 getgenv().PersistentKaloloFilters = getgenv().PersistentKaloloFilters or {}
+getgenv().PersistentGolemFilters = getgenv().PersistentGolemFilters or {}
 
 getgenv().EggTPEnabled = getgenv().EggTPEnabled ~= nil and getgenv().EggTPEnabled or true
 getgenv().PumpkinTPEnabled = getgenv().PumpkinTPEnabled ~= nil and getgenv().PumpkinTPEnabled or true
 getgenv().KaloloTPEnabled = getgenv().KaloloTPEnabled ~= nil and getgenv().KaloloTPEnabled or true
+getgenv().GolemTPEnabled = getgenv().GolemTPEnabled ~= nil and getgenv().GolemTPEnabled or true
+getgenv().AntiAFKEnabled = getgenv().AntiAFKEnabled ~= nil and getgenv().AntiAFKEnabled or true -- FITUR BARU: ANTI AFK DEFAULT ON
+
+getgenv().VisitedServers = loadVisited()
+if game.JobId ~= "" then
+    getgenv().VisitedServers[game.JobId] = true
+    saveVisited(getgenv().VisitedServers)
+end
 
 --// State Spectator
 getgenv().SpectatingPlayer = nil
@@ -48,6 +75,7 @@ getgenv().SpectateZoom = 15
 local eggFilters = getgenv().PersistentEggFilters
 local pumpkinFilters = getgenv().PersistentPumpkinFilters
 local kaloloFilters = getgenv().PersistentKaloloFilters
+local golemFilters = getgenv().PersistentGolemFilters
 
 --// Variabel & Tabel Manajemen Cleanup
 local activeConnections = {}
@@ -56,96 +84,118 @@ local eggUiButtons = {}
 
 local activePumpkinESPs = {}
 local activeKaloloESPs = {}
+local activeGolemESPs = {}
 local spectateUiButtons = {}
 
 local function fullCleanup()
-	for _, conn in ipairs(activeConnections) do
-		if typeof(conn) == "RBXScriptConnection" then
-			conn:Disconnect()
-		end
-	end
-	for _, espData in pairs(activeESPs) do
-		if espData.Connection then espData.Connection:Disconnect() end
-		if espData.Billboard then espData.Billboard:Destroy() end
-		if espData.AnchorPart then espData.AnchorPart:Destroy() end
-	end
-	for _, btn in pairs(eggUiButtons) do
-		if btn then btn:Destroy() end
-	end
-	for _, espData in pairs(activePumpkinESPs) do
-		if espData.Connection then espData.Connection:Disconnect() end
-		if espData.Billboard then espData.Billboard:Destroy() end
-		if espData.UiButton then espData.UiButton:Destroy() end
-		if espData.AnchorPart then espData.AnchorPart:Destroy() end
-	end
-	for _, espData in pairs(activeKaloloESPs) do
-		if espData.Connection then espData.Connection:Disconnect() end
-		if espData.Billboard then espData.Billboard:Destroy() end
-		if espData.UiButton then espData.UiButton:Destroy() end
-		if espData.AnchorPart then espData.AnchorPart:Destroy() end
-	end
-	table.clear(activeESPs)
-	table.clear(eggUiButtons)
-	table.clear(activePumpkinESPs)
-	table.clear(activeKaloloESPs)
-	
-	-- Kembalikan kamera ke player sendiri jika sedang spectate
-	camera.CameraType = Enum.CameraType.Custom
-	if player.Character and player.Character:FindFirstChild("Humanoid") then
-		camera.CameraSubject = player.Character.Humanoid
-	end
+    for _, conn in ipairs(activeConnections) do
+        if typeof(conn) == "RBXScriptConnection" then
+            conn:Disconnect()
+        end
+    end
+    for _, espData in pairs(activeESPs) do
+        if espData.Connection then espData.Connection:Disconnect() end
+        if espData.Billboard then espData.Billboard:Destroy() end
+        if espData.AnchorPart then espData.AnchorPart:Destroy() end
+    end
+    for _, btn in pairs(eggUiButtons) do
+        if btn then btn:Destroy() end
+    end
+    for _, espData in pairs(activePumpkinESPs) do
+        if espData.Connection then espData.Connection:Disconnect() end
+        if espData.Billboard then espData.Billboard:Destroy() end
+        if espData.UiButton then espData.UiButton:Destroy() end
+        if espData.AnchorPart then espData.AnchorPart:Destroy() end
+    end
+    for _, espData in pairs(activeKaloloESPs) do
+        if espData.Connection then espData.Connection:Disconnect() end
+        if espData.Billboard then espData.Billboard:Destroy() end
+        if espData.UiButton then espData.UiButton:Destroy() end
+        if espData.AnchorPart then espData.AnchorPart:Destroy() end
+    end
+    for _, espData in pairs(activeGolemESPs) do
+        if espData.Connection then espData.Connection:Disconnect() end
+        if espData.Billboard then espData.Billboard:Destroy() end
+        if espData.UiButton then espData.UiButton:Destroy() end
+        if espData.AnchorPart then espData.AnchorPart:Destroy() end
+    end
+    
+    table.clear(activeESPs)
+    table.clear(eggUiButtons)
+    table.clear(activePumpkinESPs)
+    table.clear(activeKaloloESPs)
+    table.clear(activeGolemESPs)
+    
+    -- Kembalikan kamera ke player sendiri jika sedang spectate
+    camera.CameraType = Enum.CameraType.Custom
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        camera.CameraSubject = player.Character.Humanoid
+    end
 
-	if screenGui then
-		screenGui:Destroy()
-	end
+    if screenGui then
+        screenGui:Destroy()
+    end
 end
 getgenv().MultiHubESPLoaded = fullCleanup
 
+
+--// FITUR BARU: CORE SYSTEM ANTI-AFK 
+local antiAfkConnection = player.Idled:Connect(function()
+    if getgenv().AntiAFKEnabled then
+        pcall(function()
+            VirtualUser:CaptureController()
+            VirtualUser:ClickButton2(Vector2.new()) -- Menyomulasikan klik kanan mouse
+        end)
+    end
+end)
+table.insert(activeConnections, antiAfkConnection)
+
+
 --// Fungsi Helper Teleport
 local function teleportToTarget(target)
-	local char = player.Character
-	if not char then return end
-	local hrp = char:FindFirstChild("HumanoidRootPart")
-	if not hrp then return end
+    local char = player.Character
+    if not char then return end
+    local hrp = char:FindFirstChild("HumanoidRootPart")
+    if not hrp then return end
 
-	local targetCf = nil
-	if typeof(target) == "Instance" then
-		if target:IsA("Model") then
-			targetCf = target:GetPivot()
-		elseif target:IsA("BasePart") then
-			targetCf = target.CFrame
-		end
-	elseif typeof(target) == "CFrame" then
-		targetCf = target
-	end
+    local targetCf = nil
+    if typeof(target) == "Instance" then
+        if target:IsA("Model") then
+            targetCf = target:GetPivot()
+        elseif target:IsA("BasePart") then
+            targetCf = target.CFrame
+        end
+    elseif typeof(target) == "CFrame" then
+        targetCf = target
+    end
 
-	if targetCf then
-		hrp.CFrame = targetCf + Vector3.new(0, 3, 0)
-	end
+    if targetCf then
+        hrp.CFrame = targetCf + Vector3.new(0, 3, 0)
+    end
 end
 
 --// Fungsi Warna Konsisten untuk Eggs
 local function getEggColor(name)
-	local hash = 0
-	for i = 1, #name do
-		hash = hash + string.byte(name, i)
-	end
-	local colorPalette = {
-		Color3.fromRGB(0, 255, 170),   -- Neon Teal
-		Color3.fromRGB(255, 80, 150),  -- Hot Pink
-		Color3.fromRGB(255, 170, 0),   -- Neon Orange
-		Color3.fromRGB(140, 80, 255),  -- Electric Purple
-		Color3.fromRGB(50, 180, 255),  -- Electric Blue
-		Color3.fromRGB(255, 230, 0),   -- Bright Yellow
-		Color3.fromRGB(0, 255, 100),   -- Neon Green
-		Color3.fromRGB(255, 90, 90)    -- Bright Red
-	}
-	return colorPalette[(hash % #colorPalette) + 1]
+    local hash = 0
+    for i = 1, #name do
+        hash = hash + string.byte(name, i)
+    end
+    local colorPalette = {
+        Color3.fromRGB(0, 255, 170),   -- Neon Teal
+        Color3.fromRGB(255, 80, 150),  -- Hot Pink
+        Color3.fromRGB(255, 170, 0),   -- Neon Orange
+        Color3.fromRGB(140, 80, 255),  -- Electric Purple
+        Color3.fromRGB(50, 180, 255),  -- Electric Blue
+        Color3.fromRGB(255, 230, 0),   -- Bright Yellow
+        Color3.fromRGB(0, 255, 100),   -- Neon Green
+        Color3.fromRGB(255, 90, 90)    -- Bright Red
+    }
+    return colorPalette[(hash % #colorPalette) + 1]
 end
 
 --// --- PEMBUATAN UI UTAMA ---
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 280, 0, 350)
+mainFrame.Size = UDim2.new(0, 320, 0, 350)
 mainFrame.Position = UDim2.new(0, 50, 0, 150)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
@@ -177,7 +227,7 @@ local titleLabel = Instance.new("TextLabel")
 titleLabel.Size = UDim2.new(1, -70, 1, 0)
 titleLabel.Position = UDim2.new(0, 10, 0, 0)
 titleLabel.BackgroundTransparency = 1
-titleLabel.Text = "Multi Hub + Spectator"
+titleLabel.Text = "Multi Hub + Spectator + Hop"
 titleLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
 titleLabel.TextSize = 12
 titleLabel.Font = Enum.Font.GothamBold
@@ -204,31 +254,40 @@ closeBtn.TextSize = 14
 closeBtn.Font = Enum.Font.GothamBold
 closeBtn.Parent = topBar
 
---// Tab Bar (5 Pilihan Menu: Eggs, Pumpkins, Kalolo, HOME, Spectate)
+--// Tab Bar
 local tabBar = Instance.new("Frame")
 tabBar.Size = UDim2.new(1, -16, 0, 30)
 tabBar.Position = UDim2.new(0, 8, 0, 42)
 tabBar.BackgroundTransparency = 1
 tabBar.Parent = mainFrame
 
-local function createTabButton(text, posX, width)
-	local btn = Instance.new("TextButton")
-	btn.Size = UDim2.new(width, -2, 1, 0)
-	btn.Position = UDim2.new(posX, 0, 0, 0)
-	btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-	btn.Text = text
-	btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-	btn.TextSize, btn.Font = 9, Enum.Font.GothamBold
-	btn.Parent = tabBar
-	Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
-	return btn
+local tabLayout = Instance.new("UIListLayout")
+tabLayout.FillDirection = Enum.FillDirection.Horizontal
+tabLayout.HorizontalAlignment = Enum.HorizontalAlignment.Center
+tabLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabLayout.Padding = UDim.new(0, 2)
+tabLayout.Parent = tabBar
+
+local function createTabButton(text, order)
+    local btn = Instance.new("TextButton")
+    btn.Size = UDim2.new(1/7, -2, 1, 0)
+    btn.LayoutOrder = order
+    btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+    btn.Text = text
+    btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+    btn.TextSize, btn.Font = 9, Enum.Font.GothamBold
+    btn.Parent = tabBar
+    Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 6)
+    return btn
 end
 
-local btnTabEggs = createTabButton("Eggs", 0, 0.20)
-local btnTabPumpkins = createTabButton("Pumpkins", 0.20, 0.20)
-local btnTabKalolo = createTabButton("Kalolo", 0.40, 0.20)
-local btnTabHome = createTabButton("HOME", 0.60, 0.20)
-local btnTabSpectate = createTabButton("Spectate", 0.80, 0.20)
+local btnTabEggs = createTabButton("Eggs", 1)
+local btnTabPumpkins = createTabButton("Pumpkins", 2)
+local btnTabKalolo = createTabButton("Kalolo", 3)
+local btnTabGolem = createTabButton("Golem", 4)
+local btnTabHome = createTabButton("HOME", 5)
+local btnTabSpectate = createTabButton("Spectate", 6)
+local btnTabServer = createTabButton("S.Hop", 7)
 
 btnTabEggs.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
 btnTabEggs.TextColor3 = Color3.fromRGB(255, 255, 255)
@@ -255,9 +314,9 @@ masterEggTpBtn.Parent = scrollingEggs
 Instance.new("UICorner", masterEggTpBtn).CornerRadius = UDim.new(0, 6)
 
 masterEggTpBtn.MouseButton1Click:Connect(function()
-	getgenv().EggTPEnabled = not getgenv().EggTPEnabled
-	masterEggTpBtn.Text = getgenv().EggTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
-	masterEggTpBtn.TextColor3 = getgenv().EggTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+    getgenv().EggTPEnabled = not getgenv().EggTPEnabled
+    masterEggTpBtn.Text = getgenv().EggTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+    masterEggTpBtn.TextColor3 = getgenv().EggTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
 end)
 
 local scrollingPumpkins = Instance.new("ScrollingFrame")
@@ -281,9 +340,9 @@ masterPumpkinTpBtn.Parent = scrollingPumpkins
 Instance.new("UICorner", masterPumpkinTpBtn).CornerRadius = UDim.new(0, 6)
 
 masterPumpkinTpBtn.MouseButton1Click:Connect(function()
-	getgenv().PumpkinTPEnabled = not getgenv().PumpkinTPEnabled
-	masterPumpkinTpBtn.Text = getgenv().PumpkinTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
-	masterPumpkinTpBtn.TextColor3 = getgenv().PumpkinTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+    getgenv().PumpkinTPEnabled = not getgenv().PumpkinTPEnabled
+    masterPumpkinTpBtn.Text = getgenv().PumpkinTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+    masterPumpkinTpBtn.TextColor3 = getgenv().PumpkinTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
 end)
 
 local scrollingKalolo = Instance.new("ScrollingFrame")
@@ -307,11 +366,39 @@ masterKaloloTpBtn.Parent = scrollingKalolo
 Instance.new("UICorner", masterKaloloTpBtn).CornerRadius = UDim.new(0, 6)
 
 masterKaloloTpBtn.MouseButton1Click:Connect(function()
-	getgenv().KaloloTPEnabled = not getgenv().KaloloTPEnabled
-	masterKaloloTpBtn.Text = getgenv().KaloloTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
-	masterKaloloTpBtn.TextColor3 = getgenv().KaloloTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+    getgenv().KaloloTPEnabled = not getgenv().KaloloTPEnabled
+    masterKaloloTpBtn.Text = getgenv().KaloloTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+    masterKaloloTpBtn.TextColor3 = getgenv().KaloloTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
 end)
 
+local scrollingGolem = Instance.new("ScrollingFrame")
+scrollingGolem.Size = UDim2.new(1, -16, 1, -85)
+scrollingGolem.Position = UDim2.new(0, 8, 0, 78)
+scrollingGolem.BackgroundTransparency = 1
+scrollingGolem.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingGolem.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollingGolem.ScrollBarThickness = 4
+scrollingGolem.Visible = false
+scrollingGolem.Parent = mainFrame
+local layoutGolem = Instance.new("UIListLayout", scrollingGolem); layoutGolem.Padding = UDim.new(0, 6)
+
+local masterGolemTpBtn = Instance.new("TextButton")
+masterGolemTpBtn.Size = UDim2.new(1, 0, 0, 28)
+masterGolemTpBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+masterGolemTpBtn.Text = getgenv().GolemTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+masterGolemTpBtn.TextColor3 = getgenv().GolemTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+masterGolemTpBtn.TextSize, masterGolemTpBtn.Font = 11, Enum.Font.GothamBold
+masterGolemTpBtn.Parent = scrollingGolem
+Instance.new("UICorner", masterGolemTpBtn).CornerRadius = UDim.new(0, 6)
+
+masterGolemTpBtn.MouseButton1Click:Connect(function()
+    getgenv().GolemTPEnabled = not getgenv().GolemTPEnabled
+    masterGolemTpBtn.Text = getgenv().GolemTPEnabled and "Teleport Feature: ON" or "Teleport Feature: OFF"
+    masterGolemTpBtn.TextColor3 = getgenv().GolemTPEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+end)
+
+
+--// UI HOME (Ditambahkan Tombol Anti-AFK disini)
 local scrollingHome = Instance.new("ScrollingFrame")
 scrollingHome.Size = UDim2.new(1, -16, 1, -85)
 scrollingHome.Position = UDim2.new(0, 8, 0, 78)
@@ -323,6 +410,27 @@ scrollingHome.Visible = false
 scrollingHome.Parent = mainFrame
 local layoutHome = Instance.new("UIListLayout", scrollingHome); layoutHome.Padding = UDim.new(0, 6)
 
+-- Tombol Anti-AFK
+local antiAfkBtn = Instance.new("TextButton")
+antiAfkBtn.Size = UDim2.new(1, 0, 0, 35)
+antiAfkBtn.BackgroundColor3 = Color3.fromRGB(55, 55, 55)
+antiAfkBtn.Text = getgenv().AntiAFKEnabled and "Anti-AFK (Bypass Kick): ON" or "Anti-AFK (Bypass Kick): OFF"
+antiAfkBtn.TextColor3 = getgenv().AntiAFKEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+antiAfkBtn.TextSize, antiAfkBtn.Font = 11, Enum.Font.GothamBold
+antiAfkBtn.Parent = scrollingHome
+Instance.new("UICorner", antiAfkBtn).CornerRadius = UDim.new(0, 6)
+
+antiAfkBtn.MouseButton1Click:Connect(function()
+    getgenv().AntiAFKEnabled = not getgenv().AntiAFKEnabled
+    antiAfkBtn.Text = getgenv().AntiAFKEnabled and "Anti-AFK (Bypass Kick): ON" or "Anti-AFK (Bypass Kick): OFF"
+    antiAfkBtn.TextColor3 = getgenv().AntiAFKEnabled and Color3.fromRGB(0, 255, 128) or Color3.fromRGB(180, 180, 180)
+end)
+
+local dividerHome = Instance.new("Frame")
+dividerHome.Size = UDim2.new(1, 0, 0, 2)
+dividerHome.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+dividerHome.Parent = scrollingHome
+
 local homeTpButton = Instance.new("TextButton")
 homeTpButton.Size = UDim2.new(1, 0, 0, 45)
 homeTpButton.BackgroundColor3 = Color3.fromRGB(0, 140, 255)
@@ -333,12 +441,12 @@ homeTpButton.Parent = scrollingHome
 Instance.new("UICorner", homeTpButton).CornerRadius = UDim.new(0, 6)
 
 homeTpButton.MouseButton1Click:Connect(function()
-	local successHome, billboardStats = pcall(function()
-		return Workspace:WaitForChild("Player Pot 1"):WaitForChild("BillboardStats", 2)
-	end)
-	if successHome and billboardStats then
-		teleportToTarget(billboardStats)
-	end
+    local successHome, billboardStats = pcall(function()
+        return Workspace:WaitForChild("Player Pot 1"):WaitForChild("BillboardStats", 2)
+    end)
+    if successHome and billboardStats then
+        teleportToTarget(billboardStats)
+    end
 end)
 
 --// Tab Spectate UI
@@ -364,14 +472,14 @@ stopSpectateBtn.Parent = scrollingSpectate
 Instance.new("UICorner", stopSpectateBtn).CornerRadius = UDim.new(0, 6)
 
 stopSpectateBtn.MouseButton1Click:Connect(function()
-	getgenv().SpectatingPlayer = nil
-	camera.CameraType = Enum.CameraType.Custom
-	if player.Character and player.Character:FindFirstChild("Humanoid") then
-		camera.CameraSubject = player.Character.Humanoid
-	end
-	stopSpectateBtn.Text = "STOPPED (OFF)"
-	task.wait(1)
-	stopSpectateBtn.Text = "STOP SPECTATE (OFF)"
+    getgenv().SpectatingPlayer = nil
+    camera.CameraType = Enum.CameraType.Custom
+    if player.Character and player.Character:FindFirstChild("Humanoid") then
+        camera.CameraSubject = player.Character.Humanoid
+    end
+    stopSpectateBtn.Text = "STOPPED (OFF)"
+    task.wait(1)
+    stopSpectateBtn.Text = "STOP SPECTATE (OFF)"
 end)
 
 -- Kontrol Zoom In / Out UI
@@ -400,45 +508,247 @@ zoomInBtn.Parent = zoomContainer
 Instance.new("UICorner", zoomInBtn).CornerRadius = UDim.new(0, 6)
 
 zoomOutBtn.MouseButton1Click:Connect(function()
-	getgenv().SpectateZoom = math.clamp(getgenv().SpectateZoom + 10, 5, 300)
+    getgenv().SpectateZoom = math.clamp(getgenv().SpectateZoom + 10, 5, 300)
 end)
 
 zoomInBtn.MouseButton1Click:Connect(function()
-	getgenv().SpectateZoom = math.clamp(getgenv().SpectateZoom - 5, 5, 300)
+    getgenv().SpectateZoom = math.clamp(getgenv().SpectateZoom - 5, 5, 300)
 end)
+
+
+--// SERVER HOP UI
+local scrollingServer = Instance.new("ScrollingFrame")
+scrollingServer.Size = UDim2.new(1, -16, 1, -85)
+scrollingServer.Position = UDim2.new(0, 8, 0, 78)
+scrollingServer.BackgroundTransparency = 1
+scrollingServer.CanvasSize = UDim2.new(0, 0, 0, 0)
+scrollingServer.AutomaticCanvasSize = Enum.AutomaticSize.Y
+scrollingServer.ScrollBarThickness = 4
+scrollingServer.Visible = false
+scrollingServer.Parent = mainFrame
+local layoutServer = Instance.new("UIListLayout", scrollingServer); layoutServer.Padding = UDim.new(0, 6)
+
+local autoHopBtn = Instance.new("TextButton")
+autoHopBtn.Size = UDim2.new(1, 0, 0, 35)
+autoHopBtn.BackgroundColor3 = Color3.fromRGB(40, 150, 60)
+autoHopBtn.Text = "Cari Server Publik Baru (Auto Skip)"
+autoHopBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+autoHopBtn.TextSize, autoHopBtn.Font = 11, Enum.Font.GothamBold
+autoHopBtn.Parent = scrollingServer
+Instance.new("UICorner", autoHopBtn).CornerRadius = UDim.new(0, 6)
+
+local clearVisitedBtn = Instance.new("TextButton")
+clearVisitedBtn.Size = UDim2.new(1, 0, 0, 25)
+clearVisitedBtn.BackgroundColor3 = Color3.fromRGB(150, 40, 40)
+clearVisitedBtn.Text = "Reset Riwayat Server (Lupa Semua Server)"
+clearVisitedBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+clearVisitedBtn.TextSize, clearVisitedBtn.Font = 10, Enum.Font.GothamBold
+clearVisitedBtn.Parent = scrollingServer
+Instance.new("UICorner", clearVisitedBtn).CornerRadius = UDim.new(0, 6)
+
+local dividerSrv = Instance.new("Frame")
+dividerSrv.Size = UDim2.new(1, 0, 0, 2)
+dividerSrv.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+dividerSrv.Parent = scrollingServer
+
+local privateServerLabel = Instance.new("TextLabel")
+privateServerLabel.Size = UDim2.new(1, 0, 0, 20)
+privateServerLabel.BackgroundTransparency = 1
+privateServerLabel.Text = "Join Private Server via JobID:"
+privateServerLabel.TextColor3 = Color3.fromRGB(200, 200, 200)
+privateServerLabel.TextSize = 11
+privateServerLabel.Font = Enum.Font.GothamBold
+privateServerLabel.Parent = scrollingServer
+
+local privateJobIdBox = Instance.new("TextBox")
+privateJobIdBox.Size = UDim2.new(1, 0, 0, 30)
+privateJobIdBox.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+privateJobIdBox.PlaceholderText = "Paste JobID Server Anda Disini..."
+privateJobIdBox.Text = ""
+privateJobIdBox.TextColor3 = Color3.fromRGB(255, 255, 255)
+privateJobIdBox.TextSize = 10
+privateJobIdBox.ClearTextOnFocus = false
+privateJobIdBox.Parent = scrollingServer
+Instance.new("UICorner", privateJobIdBox).CornerRadius = UDim.new(0, 6)
+
+local joinPrivateBtn = Instance.new("TextButton")
+joinPrivateBtn.Size = UDim2.new(1, 0, 0, 30)
+joinPrivateBtn.BackgroundColor3 = Color3.fromRGB(120, 80, 200)
+joinPrivateBtn.Text = "Masuk ke Private Server!"
+joinPrivateBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+joinPrivateBtn.TextSize, joinPrivateBtn.Font = 11, Enum.Font.GothamBold
+joinPrivateBtn.Parent = scrollingServer
+Instance.new("UICorner", joinPrivateBtn).CornerRadius = UDim.new(0, 6)
+
+local dividerSrv2 = Instance.new("Frame")
+dividerSrv2.Size = UDim2.new(1, 0, 0, 2)
+dividerSrv2.BackgroundColor3 = Color3.fromRGB(80, 80, 80)
+dividerSrv2.Parent = scrollingServer
+
+local loadServersBtn = Instance.new("TextButton")
+loadServersBtn.Size = UDim2.new(1, 0, 0, 30)
+loadServersBtn.BackgroundColor3 = Color3.fromRGB(200, 140, 0)
+loadServersBtn.Text = "⬇ Muat Daftar Server Publik ⬇"
+loadServersBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+loadServersBtn.TextSize, loadServersBtn.Font = 11, Enum.Font.GothamBold
+loadServersBtn.Parent = scrollingServer
+Instance.new("UICorner", loadServersBtn).CornerRadius = UDim.new(0, 6)
+
+local dynamicServerBtns = {}
+
+local function refreshServerListUI()
+    -- Bersihkan tombol server yang lama dari UI
+    for _, data in ipairs(dynamicServerBtns) do
+        if data.button then data.button:Destroy() end
+    end
+    table.clear(dynamicServerBtns)
+    
+    loadServersBtn.Text = "Memuat Data Server..."
+    
+    task.spawn(function()
+        local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+        local success, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet(url))
+        end)
+        
+        if success and result and result.data then
+            for _, srv in ipairs(result.data) do
+                if srv.id ~= game.JobId then
+                    local isVisited = getgenv().VisitedServers[srv.id]
+                    
+                    local srvBtn = Instance.new("TextButton")
+                    srvBtn.Size = UDim2.new(1, 0, 0, 28)
+                    srvBtn.TextSize, srvBtn.Font = 10, Enum.Font.GothamBold
+                    Instance.new("UICorner", srvBtn).CornerRadius = UDim.new(0, 6)
+                    
+                    if isVisited then
+                        srvBtn.BackgroundColor3 = Color3.fromRGB(120, 60, 20)
+                        srvBtn.Text = "Join: " .. srv.playing .. "/" .. srv.maxPlayers .. " [SUDAH VISITED]"
+                        srvBtn.TextColor3 = Color3.fromRGB(200, 200, 200)
+                    else
+                        srvBtn.BackgroundColor3 = Color3.fromRGB(40, 100, 150)
+                        srvBtn.Text = "Join: " .. srv.playing .. "/" .. srv.maxPlayers
+                        srvBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+                    end
+                    
+                    srvBtn.MouseButton1Click:Connect(function()
+                        getgenv().VisitedServers[srv.id] = true
+                        saveVisited(getgenv().VisitedServers)
+                        srvBtn.Text = "Teleporting..."
+                        TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, player)
+                    end)
+                    
+                    srvBtn.Parent = scrollingServer
+                    table.insert(dynamicServerBtns, {button = srvBtn, id = srv.id, playing = srv.playing, max = srv.maxPlayers})
+                end
+            end
+            loadServersBtn.Text = "⬇ Refresh Daftar Server ⬇"
+        else
+            loadServersBtn.Text = "Gagal Memuat! (Klik Untuk Coba Lagi)"
+        end
+    end)
+end
+
+loadServersBtn.MouseButton1Click:Connect(refreshServerListUI)
+
+autoHopBtn.MouseButton1Click:Connect(function()
+    autoHopBtn.Text = "Mencari Server..."
+    local url = "https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Desc&limit=100"
+    local success, result = pcall(function()
+        return HttpService:JSONDecode(game:HttpGet(url))
+    end)
+
+    if success and result and result.data then
+        for _, srv in ipairs(result.data) do
+            if srv.playing < srv.maxPlayers and srv.id ~= game.JobId and not getgenv().VisitedServers[srv.id] then
+                getgenv().VisitedServers[srv.id] = true
+                saveVisited(getgenv().VisitedServers)
+                autoHopBtn.Text = "Teleporting..."
+                TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, player)
+                return
+            end
+        end
+        autoHopBtn.Text = "Tidak ada server baru ditemukan!"
+        task.wait(2)
+        autoHopBtn.Text = "Cari Server Publik Baru (Auto Skip)"
+    else
+        autoHopBtn.Text = "Error HTTP Get (Coba Lagi)"
+        task.wait(2)
+        autoHopBtn.Text = "Cari Server Publik Baru (Auto Skip)"
+    end
+end)
+
+clearVisitedBtn.MouseButton1Click:Connect(function()
+    getgenv().VisitedServers = {}
+    getgenv().VisitedServers[game.JobId] = true
+    saveVisited(getgenv().VisitedServers)
+    clearVisitedBtn.Text = "Riwayat Berhasil Dihapus!"
+    
+    for _, data in ipairs(dynamicServerBtns) do
+        if data.button then
+            data.button.BackgroundColor3 = Color3.fromRGB(40, 100, 150)
+            data.button.Text = "Join: " .. data.playing .. "/" .. data.max
+            data.button.TextColor3 = Color3.fromRGB(255, 255, 255)
+        end
+    end
+
+    task.wait(2)
+    clearVisitedBtn.Text = "Reset Riwayat Server (Lupa Semua Server)"
+end)
+
+joinPrivateBtn.MouseButton1Click:Connect(function()
+    local inputId = privateJobIdBox.Text
+    if inputId and inputId ~= "" then
+        joinPrivateBtn.Text = "Mencoba Masuk..."
+        pcall(function()
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, inputId, player)
+        end)
+        task.wait(3)
+        joinPrivateBtn.Text = "Gagal (Pastikan JobID Benar)"
+        task.wait(2)
+        joinPrivateBtn.Text = "Masuk ke Private Server!"
+    end
+end)
+
 
 -- Fungsi Navigasi Tab
 local function switchTab(activeTab)
-	scrollingEggs.Visible = (activeTab == "Eggs")
-	scrollingPumpkins.Visible = (activeTab == "Pumpkins")
-	scrollingKalolo.Visible = (activeTab == "Kalolo")
-	scrollingHome.Visible = (activeTab == "HOME")
-	scrollingSpectate.Visible = (activeTab == "Spectate")
+    scrollingEggs.Visible = (activeTab == "Eggs")
+    scrollingPumpkins.Visible = (activeTab == "Pumpkins")
+    scrollingKalolo.Visible = (activeTab == "Kalolo")
+    scrollingGolem.Visible = (activeTab == "Golem")
+    scrollingHome.Visible = (activeTab == "HOME")
+    scrollingSpectate.Visible = (activeTab == "Spectate")
+    scrollingServer.Visible = (activeTab == "S.Hop")
 
-	local tabs = {
-		{btn = btnTabEggs, name = "Eggs"},
-		{btn = btnTabPumpkins, name = "Pumpkins"},
-		{btn = btnTabKalolo, name = "Kalolo"},
-		{btn = btnTabHome, name = "HOME"},
-		{btn = btnTabSpectate, name = "Spectate"}
-	}
+    local tabs = {
+        {btn = btnTabEggs, name = "Eggs"},
+        {btn = btnTabPumpkins, name = "Pumpkins"},
+        {btn = btnTabKalolo, name = "Kalolo"},
+        {btn = btnTabGolem, name = "Golem"},
+        {btn = btnTabHome, name = "HOME"},
+        {btn = btnTabSpectate, name = "Spectate"},
+        {btn = btnTabServer, name = "S.Hop"}
+    }
 
-	for _, t in ipairs(tabs) do
-		if t.name == activeTab then
-			t.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-			t.btn.TextColor3 = Color3.fromRGB(255, 255, 255)
-		else
-			t.btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-			t.btn.TextColor3 = Color3.fromRGB(200, 200, 200)
-		end
-	end
+    for _, t in ipairs(tabs) do
+        if t.name == activeTab then
+            t.btn.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+            t.btn.TextColor3 = Color3.fromRGB(255, 255, 255)
+        else
+            t.btn.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+            t.btn.TextColor3 = Color3.fromRGB(200, 200, 200)
+        end
+    end
 end
 
 btnTabEggs.MouseButton1Click:Connect(function() switchTab("Eggs") end)
 btnTabPumpkins.MouseButton1Click:Connect(function() switchTab("Pumpkins") end)
 btnTabKalolo.MouseButton1Click:Connect(function() switchTab("Kalolo") end)
+btnTabGolem.MouseButton1Click:Connect(function() switchTab("Golem") end)
 btnTabHome.MouseButton1Click:Connect(function() switchTab("HOME") end)
 btnTabSpectate.MouseButton1Click:Connect(function() switchTab("Spectate") end)
+btnTabServer.MouseButton1Click:Connect(function() switchTab("S.Hop") end)
 
 -- Resizer Handle & Dragging
 local resizeHandle = Instance.new("TextButton")
@@ -455,565 +765,726 @@ local isMinimized = false
 local normalSize = mainFrame.Size
 
 table.insert(activeConnections, topBar.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = true; dragStart = input.Position; startPos = mainFrame.Position
-	end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = true; dragStart = input.Position; startPos = mainFrame.Position
+    end
 end))
 
 table.insert(activeConnections, UserInputService.InputChanged:Connect(function(input)
-	if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - dragStart
-		mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
-	end
-	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
-		local delta = input.Position - resizeStart
-		local newW = math.clamp(startSize.X.Offset + delta.X, 200, 500)
-		local newH = math.clamp(startSize.Y.Offset + delta.Y, 180, 600)
-		mainFrame.Size = UDim2.new(0, newW, 0, newH)
-	end
+    if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - dragStart
+        mainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y)
+    end
+    if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+        local delta = input.Position - resizeStart
+        local newW = math.clamp(startSize.X.Offset + delta.X, 200, 500)
+        local newH = math.clamp(startSize.Y.Offset + delta.Y, 180, 600)
+        mainFrame.Size = UDim2.new(0, newW, 0, newH)
+    end
 end))
 
 resizeHandle.InputBegan:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		resizing = true; resizeStart = input.Position; startSize = mainFrame.Size
-	end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        resizing = true; resizeStart = input.Position; startSize = mainFrame.Size
+    end
 end)
 
 UserInputService.InputEnded:Connect(function(input)
-	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
-		dragging = false; resizing = false
-	end
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        dragging = false; resizing = false
+    end
 end)
 
 minimizeBtn.MouseButton1Click:Connect(function()
-	isMinimized = not isMinimized
-	if isMinimized then
-		normalSize = mainFrame.Size
-		minimizeBtn.Text = "+"
-		scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false; scrollingHome.Visible = false; scrollingSpectate.Visible = false
-		tabBar.Visible = false; resizeHandle.Visible = false
-		mainFrame:TweenSize(UDim2.new(0, normalSize.X.Offset, 0, 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
-	else
-		minimizeBtn.Text = "-"
-		mainFrame:TweenSize(normalSize, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
-		task.wait(0.2)
-		tabBar.Visible = true; resizeHandle.Visible = true
-		scrollingEggs.Visible = true
-	end
+    isMinimized = not isMinimized
+    if isMinimized then
+        normalSize = mainFrame.Size
+        minimizeBtn.Text = "+"
+        scrollingEggs.Visible = false; scrollingPumpkins.Visible = false; scrollingKalolo.Visible = false; scrollingHome.Visible = false; scrollingSpectate.Visible = false
+        scrollingGolem.Visible = false; scrollingServer.Visible = false
+        tabBar.Visible = false; resizeHandle.Visible = false
+        mainFrame:TweenSize(UDim2.new(0, normalSize.X.Offset, 0, 35), Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+    else
+        minimizeBtn.Text = "-"
+        mainFrame:TweenSize(normalSize, Enum.EasingDirection.Out, Enum.EasingStyle.Quad, 0.2, true)
+        task.wait(0.2)
+        tabBar.Visible = true; resizeHandle.Visible = true
+        scrollingEggs.Visible = true
+        switchTab("Eggs")
+    end
 end)
 
 closeBtn.MouseButton1Click:Connect(function() fullCleanup() end)
 
 
---// --- BACKGROUND LOADER UNTUK ESP (Mencegah skrip berhenti total jika folder Workspace belum siap) ---
+--// --- BACKGROUND LOADER UNTUK ESP ---
 task.spawn(function()
-	--// ESP 1: WILD EGGS
-	local wildEggsFolder
-	local successEggs = pcall(function()
-		wildEggsFolder = Workspace:WaitForChild("EggRuntime", 5):WaitForChild("WildEggs", 5)
-	end)
-
-	local function updateESPVisibility()
-		for model, espData in pairs(activeESPs) do
-			if espData.AnchorPart and espData.AnchorPart.Parent then
-				local eggName = espData.EggName
-				local isEnabled = (eggFilters[eggName] == true)
-				if espData.Billboard then espData.Billboard.Enabled = isEnabled end
-				if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
-			end
-		end
-	end
-
-	local function createToggleUI(eggName)
-		if eggUiButtons[eggName] ~= nil then return end
-		if eggFilters[eggName] == nil then eggFilters[eggName] = true end
-
-		local eggColor = getEggColor(eggName)
-		local toggleButton = Instance.new("TextButton")
-		toggleButton.Size = UDim2.new(1, 0, 0, 32)
-		toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-		toggleButton.Text = ""
-		toggleButton.AutoButtonColor = false
-		toggleButton.Parent = scrollingEggs
-		Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
-
-		local checkIndicator = Instance.new("TextLabel")
-		checkIndicator.Size = UDim2.new(0, 25, 1, 0)
-		checkIndicator.Position = UDim2.new(0, 5, 0, 0)
-		checkIndicator.BackgroundTransparency = 1
-		checkIndicator.Text = eggFilters[eggName] and "✔" or ""
-		checkIndicator.TextColor3 = eggFilters[eggName] and eggColor or Color3.fromRGB(120, 120, 120)
-		checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
-		checkIndicator.Parent = toggleButton
-
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Size = UDim2.new(1, -85, 1, 0)
-		nameLabel.Position = UDim2.new(0, 32, 0, 0)
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Text = tostring(eggName)
-		nameLabel.TextColor3 = eggFilters[eggName] and eggColor or Color3.fromRGB(120, 120, 120)
-		nameLabel.TextSize, nameLabel.Font = 13, Enum.Font.GothamBold
-		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		nameLabel.Parent = toggleButton
-
-		local tpButton = Instance.new("TextButton")
-		tpButton.Size = UDim2.new(0, 45, 0, 22)
-		tpButton.Position = UDim2.new(1, -50, 0.5, -11)
-		tpButton.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
-		tpButton.Text = "TP"
-		tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-		tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
-		tpButton.Parent = toggleButton
-		Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
-
-		tpButton.MouseButton1Click:Connect(function()
-			if getgenv().EggTPEnabled then
-				for _, data in pairs(activeESPs) do
-					if data.EggName == eggName and data.AnchorPart and data.AnchorPart.Parent then
-						teleportToTarget(data.AnchorPart)
-						break
-					end
-				end
-			end
-		end)
-
-		toggleButton.MouseButton1Click:Connect(function()
-			eggFilters[eggName] = not eggFilters[eggName]
-			if eggFilters[eggName] then
-				checkIndicator.Text = "✔"
-				checkIndicator.TextColor3, nameLabel.TextColor3 = eggColor, eggColor
-			else
-				checkIndicator.Text = ""
-				checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
-			end
-			updateESPVisibility()
-		end)
-
-		eggUiButtons[eggName] = toggleButton
-	end
-
-	local function addESP(model)
-		if activeESPs[model] then return end
-		if not model:IsA("Model") then return end
-
-		local eggName = model.Name
-		createToggleUI(eggName)
-
-		local eggColor = getEggColor(eggName)
-		local isEnabled = (eggFilters[eggName] == true)
-
-		pcall(function() model:RequestStreamAsync() end)
-
-		local anchorPart = Instance.new("Part")
-		anchorPart.Size = Vector3.new(1, 1, 1)
-		anchorPart.Transparency = 1
-		anchorPart.CanCollide = false
-		anchorPart.Anchored = true
-		anchorPart.CFrame = model:GetPivot()
-		anchorPart.Name = "WildEgg_Anchor_" .. eggName
-		anchorPart.Parent = Workspace
-
-		local billboard = Instance.new("BillboardGui")
-		billboard.Adornee = anchorPart
-		billboard.Size = UDim2.new(0, 120, 0, 40)
-		billboard.StudsOffset = Vector3.new(0, 3, 0)
-		billboard.AlwaysOnTop = true
-		billboard.Enabled = isEnabled
-		billboard.Parent = anchorPart
-
-		local textLabel = Instance.new("TextLabel")
-		textLabel.Size = UDim2.new(1, 0, 1, 0)
-		textLabel.BackgroundTransparency = 1
-		textLabel.TextColor3 = eggColor
-		textLabel.TextStrokeTransparency = 0.3
-		textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
-		textLabel.Visible = isEnabled
-		textLabel.Parent = billboard
-
-		local renderConn
-		renderConn = RunService.RenderStepped:Connect(function()
-			if not model or not model.Parent then
-				if renderConn then renderConn:Disconnect() end
-				return
-			end
-			
-			local currentCf = model:GetPivot()
-			if currentCf.Position.Magnitude > 0 then
-				anchorPart.CFrame = currentCf
-			end
-
-			if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-				local hrp = player.Character.HumanoidRootPart
-				local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
-				textLabel.Text = eggName .. "\n[" .. distance .. "m]"
-			end
-		end)
-
-		activeESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, EggName = eggName, AnchorPart = anchorPart }
-	end
-
-	local function removeESP(model)
-		if activeESPs[model] then
-			local eggName = activeESPs[model].EggName
-			if activeESPs[model].Connection then activeESPs[model].Connection:Disconnect() end
-			if activeESPs[model].AnchorPart then activeESPs[model].AnchorPart:Destroy() end
-			activeESPs[model] = nil
-
-			local stillExists = false
-			for _, data in pairs(activeESPs) do
-				if data.EggName == eggName then stillExists = true break end
-			end
-
-			if not stillExists then
-				if eggUiButtons[eggName] then
-					eggUiButtons[eggName]:Destroy()
-					eggUiButtons[eggName] = nil
-				end
-			end
-		end
-	end
-
-	if wildEggsFolder then
-		for _, child in ipairs(wildEggsFolder:GetChildren()) do addESP(child) end
-		table.insert(activeConnections, wildEggsFolder.ChildAdded:Connect(function(child) task.wait(0.1); addESP(child) end))
-		table.insert(activeConnections, wildEggsFolder.ChildRemoved:Connect(function(child) removeESP(child) end))
-	end
-
-
-	--// ESP 2: ACTIVE PUMPKINS
-	local activePumpkinsFolder
-	local successPumpkins = pcall(function()
-		activePumpkinsFolder = Workspace:WaitForChild("ActivePumpkins", 5)
-	end)
-
-	local function updatePumpkinESPVisibility()
-		for model, espData in pairs(activePumpkinESPs) do
-			if espData.AnchorPart and espData.AnchorPart.Parent then
-				local pName = espData.PumpkinName
-				local isEnabled = (pumpkinFilters[pName] == true)
-				if espData.Billboard then espData.Billboard.Enabled = isEnabled end
-				if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
-			end
-		end
-	end
-
-	local function addPumpkinESP(model)
-		if activePumpkinESPs[model] then return end
-		if not model:IsA("Model") then return end
-
-		local pName = model.Name
-		if pumpkinFilters[pName] == nil then pumpkinFilters[pName] = true end
-
-		local pumpkinColor = Color3.fromRGB(255, 140, 0)
-		local toggleButton = Instance.new("TextButton")
-		toggleButton.Size = UDim2.new(1, 0, 0, 32)
-		toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-		toggleButton.Text = ""
-		toggleButton.AutoButtonColor = false
-		toggleButton.Parent = scrollingPumpkins
-		Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
-
-		local checkIndicator = Instance.new("TextLabel")
-		checkIndicator.Size = UDim2.new(0, 25, 1, 0)
-		checkIndicator.Position = UDim2.new(0, 5, 0, 0)
-		checkIndicator.BackgroundTransparency = 1
-		checkIndicator.Text = pumpkinFilters[pName] and "✔" or ""
-		checkIndicator.TextColor3 = pumpkinFilters[pName] and pumpkinColor or Color3.fromRGB(120, 120, 120)
-		checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
-		checkIndicator.Parent = toggleButton
-
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Size = UDim2.new(1, -85, 1, 0)
-		nameLabel.Position = UDim2.new(0, 32, 0, 0)
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Text = tostring(pName)
-		nameLabel.TextColor3 = pumpkinFilters[pName] and pumpkinColor or Color3.fromRGB(120, 120, 120)
-		nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
-		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		nameLabel.Parent = toggleButton
-
-		local tpButton = Instance.new("TextButton")
-		tpButton.Size = UDim2.new(0, 45, 0, 22)
-		tpButton.Position = UDim2.new(1, -50, 0.5, -11)
-		tpButton.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
-		tpButton.Text = "TP"
-		tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-		tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
-		tpButton.Parent = toggleButton
-		Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
-
-		pcall(function() model:RequestStreamAsync() end)
-
-		local anchorPart = Instance.new("Part")
-		anchorPart.Size = Vector3.new(1, 1, 1)
-		anchorPart.Transparency = 1
-		anchorPart.CanCollide = false
-		anchorPart.Anchored = true
-		anchorPart.CFrame = model:GetPivot()
-		anchorPart.Name = "Pumpkin_Anchor_" .. pName
-		anchorPart.Parent = Workspace
-
-		tpButton.MouseButton1Click:Connect(function()
-			if getgenv().PumpkinTPEnabled then
-				teleportToTarget(anchorPart)
-			end
-		end)
-
-		toggleButton.MouseButton1Click:Connect(function()
-			pumpkinFilters[pName] = not pumpkinFilters[pName]
-			if pumpkinFilters[pName] then
-				checkIndicator.Text = "✔"
-				checkIndicator.TextColor3, nameLabel.TextColor3 = pumpkinColor, pumpkinColor
-			else
-				checkIndicator.Text = ""
-				checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
-			end
-			updatePumpkinESPVisibility()
-		end)
-
-		local isEnabled = (pumpkinFilters[pName] == true)
-
-		local billboard = Instance.new("BillboardGui")
-		billboard.Adornee = anchorPart
-		billboard.Size = UDim2.new(0, 120, 0, 40)
-		billboard.StudsOffset = Vector3.new(0, 3, 0)
-		billboard.AlwaysOnTop = true
-		billboard.Enabled = isEnabled
-		billboard.Parent = anchorPart
-
-		local textLabel = Instance.new("TextLabel")
-		textLabel.Size = UDim2.new(1, 0, 1, 0)
-		textLabel.BackgroundTransparency = 1
-		textLabel.TextColor3 = pumpkinColor
-		textLabel.TextStrokeTransparency = 0.3
-		textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
-		textLabel.Visible = isEnabled
-		textLabel.Parent = billboard
-
-		local renderConn
-		renderConn = RunService.RenderStepped:Connect(function()
-			if not model or not model.Parent then
-				if renderConn then renderConn:Disconnect() end
-				return
-			end
-			local currentCf = model:GetPivot()
-			if currentCf.Position.Magnitude > 0 then
-				anchorPart.CFrame = currentCf
-			end
-
-			if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-				local hrp = player.Character.HumanoidRootPart
-				local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
-				textLabel.Text = pName .. "\n[" .. distance .. "m]"
-			end
-		end)
-
-		activePumpkinESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, PumpkinName = pName, AnchorPart = anchorPart }
-	end
-
-	local function removePumpkinESP(model)
-		if activePumpkinESPs[model] then
-			if activePumpkinESPs[model].Connection then activePumpkinESPs[model].Connection:Disconnect() end
-			if activePumpkinESPs[model].AnchorPart then activePumpkinESPs[model].AnchorPart:Destroy() end
-			if activePumpkinESPs[model].UiButton then activePumpkinESPs[model].UiButton:Destroy() end
-			activePumpkinESPs[model] = nil
-		end
-	end
-
-	if successPumpkins and activePumpkinsFolder then
-		for _, child in ipairs(activePumpkinsFolder:GetChildren()) do addPumpkinESP(child) end
-		table.insert(activeConnections, activePumpkinsFolder.ChildAdded:Connect(function(child) task.wait(0.1); addPumpkinESP(child) end))
-		table.insert(activeConnections, activePumpkinsFolder.ChildRemoved:Connect(function(child) removePumpkinESP(child) end))
-	end
-
-
-	--// ESP 3: KING KALOLO EGG
-	local kaloloBossFolder
-	local successKalolo = pcall(function()
-		kaloloBossFolder = Workspace:WaitForChild("KingKaloloBossRuntime", 5)
-	end)
-
-	local function updateKaloloESPVisibility()
-		for model, espData in pairs(activeKaloloESPs) do
-			if espData.AnchorPart and espData.AnchorPart.Parent then
-				local kName = espData.KaloloName
-				local isEnabled = (kaloloFilters[kName] == true)
-				if espData.Billboard then espData.Billboard.Enabled = isEnabled end
-				if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
-			end
-		end
-	end
-
-	local function addKaloloESP(model)
-		if activeKaloloESPs[model] then return end
-		if not model:IsA("Model") or model.Name ~= "KingKalolo Egg" then return end
-
-		local kName = model.Name
-		if kaloloFilters[kName] == nil then kaloloFilters[kName] = true end
-
-		local kaloloColor = Color3.fromRGB(170, 0, 255)
-		local toggleButton = Instance.new("TextButton")
-		toggleButton.Size = UDim2.new(1, 0, 0, 32)
-		toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-		toggleButton.Text = ""
-		toggleButton.AutoButtonColor = false
-		toggleButton.Parent = scrollingKalolo
-		Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
-
-		local checkIndicator = Instance.new("TextLabel")
-		checkIndicator.Size = UDim2.new(0, 25, 1, 0)
-		checkIndicator.Position = UDim2.new(0, 5, 0, 0)
-		checkIndicator.BackgroundTransparency = 1
-		checkIndicator.Text = kaloloFilters[kName] and "✔" or ""
-		checkIndicator.TextColor3 = kaloloFilters[kName] and kaloloColor or Color3.fromRGB(120, 120, 120)
-		checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
-		checkIndicator.Parent = toggleButton
-
-		local nameLabel = Instance.new("TextLabel")
-		nameLabel.Size = UDim2.new(1, -85, 1, 0)
-		nameLabel.Position = UDim2.new(0, 32, 0, 0)
-		nameLabel.BackgroundTransparency = 1
-		nameLabel.Text = tostring(kName)
-		nameLabel.TextColor3 = kaloloFilters[kName] and kaloloColor or Color3.fromRGB(120, 120, 120)
-		nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
-		nameLabel.TextXAlignment = Enum.TextXAlignment.Left
-		nameLabel.Parent = toggleButton
-
-		local tpButton = Instance.new("TextButton")
-		tpButton.Size = UDim2.new(0, 45, 0, 22)
-		tpButton.Position = UDim2.new(1, -50, 0.5, -11)
-		tpButton.BackgroundColor3 = Color3.fromRGB(120, 0, 200)
-		tpButton.Text = "TP"
-		tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
-		tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
-		tpButton.Parent = toggleButton
-		Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
-
-		pcall(function() model:RequestStreamAsync() end)
-
-		local anchorPart = Instance.new("Part")
-		anchorPart.Size = Vector3.new(1, 1, 1)
-		anchorPart.Transparency = 1
-		anchorPart.CanCollide = false
-		anchorPart.Anchored = true
-		anchorPart.CFrame = model:GetPivot()
-		anchorPart.Name = "Kalolo_Anchor"
-		anchorPart.Parent = Workspace
-
-		tpButton.MouseButton1Click:Connect(function()
-			if getgenv().KaloloTPEnabled then
-				teleportToTarget(anchorPart)
-			end
-		end)
-
-		toggleButton.MouseButton1Click:Connect(function()
-			kaloloFilters[kName] = not kaloloFilters[kName]
-			if kaloloFilters[kName] then
-				checkIndicator.Text = "✔"
-				checkIndicator.TextColor3, nameLabel.TextColor3 = kaloloColor, kaloloColor
-			else
-				checkIndicator.Text = ""
-				checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
-			end
-			updateKaloloESPVisibility()
-		end)
-
-		local isEnabled = (kaloloFilters[kName] == true)
-
-		local billboard = Instance.new("BillboardGui")
-		billboard.Adornee = anchorPart
-		billboard.Size = UDim2.new(0, 120, 0, 40)
-		billboard.StudsOffset = Vector3.new(0, 3, 0)
-		billboard.AlwaysOnTop = true
-		billboard.Enabled = isEnabled
-		billboard.Parent = anchorPart
-
-		local textLabel = Instance.new("TextLabel")
-		textLabel.Size = UDim2.new(1, 0, 1, 0)
-		textLabel.BackgroundTransparency = 1
-		textLabel.TextColor3 = kaloloColor
-		textLabel.TextStrokeTransparency = 0.3
-		textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
-		textLabel.Visible = isEnabled
-		textLabel.Parent = billboard
-
-		local renderConn
-		renderConn = RunService.RenderStepped:Connect(function()
-			if not model or not model.Parent then
-				if renderConn then renderConn:Disconnect() end
-				return
-			end
-			local currentCf = model:GetPivot()
-			if currentCf.Position.Magnitude > 0 then
-				anchorPart.CFrame = currentCf
-			end
-
-			if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
-				local hrp = player.Character.HumanoidRootPart
-				local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
-				textLabel.Text = kName .. "\n[" .. distance .. "m]"
-			end
-		end)
-
-		activeKaloloESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, KaloloName = kName, AnchorPart = anchorPart }
-	end
-
-	local function removeKaloloESP(model)
-		if activeKaloloESPs[model] then
-			if activeKaloloESPs[model].Connection then activeKaloloESPs[model].Connection:Disconnect() end
-			if activeKaloloESPs[model].AnchorPart then activeKaloloESPs[model].AnchorPart:Destroy() end
-			if activeKaloloESPs[model].UiButton then activeKaloloESPs[model].UiButton:Destroy() end
-			activeKaloloESPs[model] = nil
-		end
-	end
-
-	if successKalolo and kaloloBossFolder then
-		for _, desc in ipairs(kaloloBossFolder:GetDescendants()) do
-			if desc:IsA("Model") and desc.Name == "KingKalolo Egg" then
-				addKaloloESP(desc)
-			end
-		end
-		table.insert(activeConnections, kaloloBossFolder.DescendantAdded:Connect(function(desc)
-			if desc:IsA("Model") and desc.Name == "KingKalolo Egg" then
-				task.wait(0.1)
-				addKaloloESP(desc)
-			end
-		end))
-		table.insert(activeConnections, kaloloBossFolder.DescendantRemoving:Connect(function(desc)
-			if desc:IsA("Model") then
-				removeKaloloESP(desc)
-			end
-		end))
-	end
+    --// ESP 1: WILD EGGS
+    local wildEggsFolder
+    local successEggs = pcall(function()
+        wildEggsFolder = Workspace:WaitForChild("EggRuntime", 5):WaitForChild("WildEggs", 5)
+    end)
+
+    local function updateESPVisibility()
+        for model, espData in pairs(activeESPs) do
+            if espData.AnchorPart and espData.AnchorPart.Parent then
+                local eggName = espData.EggName
+                local isEnabled = (eggFilters[eggName] == true)
+                if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+                if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+            end
+        end
+    end
+
+    local function createToggleUI(eggName)
+        if eggUiButtons[eggName] ~= nil then return end
+        if eggFilters[eggName] == nil then eggFilters[eggName] = true end
+
+        local eggColor = getEggColor(eggName)
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Size = UDim2.new(1, 0, 0, 32)
+        toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        toggleButton.Text = ""
+        toggleButton.AutoButtonColor = false
+        toggleButton.Parent = scrollingEggs
+        Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+        local checkIndicator = Instance.new("TextLabel")
+        checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+        checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+        checkIndicator.BackgroundTransparency = 1
+        checkIndicator.Text = eggFilters[eggName] and "✔" or ""
+        checkIndicator.TextColor3 = eggFilters[eggName] and eggColor or Color3.fromRGB(120, 120, 120)
+        checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+        checkIndicator.Parent = toggleButton
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -85, 1, 0)
+        nameLabel.Position = UDim2.new(0, 32, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = tostring(eggName)
+        nameLabel.TextColor3 = eggFilters[eggName] and eggColor or Color3.fromRGB(120, 120, 120)
+        nameLabel.TextSize, nameLabel.Font = 13, Enum.Font.GothamBold
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = toggleButton
+
+        local tpButton = Instance.new("TextButton")
+        tpButton.Size = UDim2.new(0, 45, 0, 22)
+        tpButton.Position = UDim2.new(1, -50, 0.5, -11)
+        tpButton.BackgroundColor3 = Color3.fromRGB(0, 120, 200)
+        tpButton.Text = "TP"
+        tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
+        tpButton.Parent = toggleButton
+        Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
+
+        tpButton.MouseButton1Click:Connect(function()
+            if getgenv().EggTPEnabled then
+                for _, data in pairs(activeESPs) do
+                    if data.EggName == eggName and data.AnchorPart and data.AnchorPart.Parent then
+                        teleportToTarget(data.AnchorPart)
+                        break
+                    end
+                end
+            end
+        end)
+
+        toggleButton.MouseButton1Click:Connect(function()
+            eggFilters[eggName] = not eggFilters[eggName]
+            if eggFilters[eggName] then
+                checkIndicator.Text = "✔"
+                checkIndicator.TextColor3, nameLabel.TextColor3 = eggColor, eggColor
+            else
+                checkIndicator.Text = ""
+                checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+            end
+            updateESPVisibility()
+        end)
+
+        eggUiButtons[eggName] = toggleButton
+    end
+
+    local function addESP(model)
+        if activeESPs[model] then return end
+        if not model:IsA("Model") then return end
+
+        local eggName = model.Name
+        createToggleUI(eggName)
+
+        local eggColor = getEggColor(eggName)
+        local isEnabled = (eggFilters[eggName] == true)
+
+        pcall(function() model:RequestStreamAsync() end)
+
+        local anchorPart = Instance.new("Part")
+        anchorPart.Size = Vector3.new(1, 1, 1)
+        anchorPart.Transparency = 1
+        anchorPart.CanCollide = false
+        anchorPart.Anchored = true
+        anchorPart.CFrame = model:GetPivot()
+        anchorPart.Name = "WildEgg_Anchor_" .. eggName
+        anchorPart.Parent = Workspace
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Adornee = anchorPart
+        billboard.Size = UDim2.new(0, 120, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Enabled = isEnabled
+        billboard.Parent = anchorPart
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = eggColor
+        textLabel.TextStrokeTransparency = 0.3
+        textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+        textLabel.Visible = isEnabled
+        textLabel.Parent = billboard
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            if not model or not model.Parent then
+                if renderConn then renderConn:Disconnect() end
+                return
+            end
+            
+            local currentCf = model:GetPivot()
+            if currentCf.Position.Magnitude > 0 then
+                anchorPart.CFrame = currentCf
+            end
+
+            if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
+                textLabel.Text = eggName .. "\n[" .. distance .. "m]"
+            end
+        end)
+
+        activeESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, EggName = eggName, AnchorPart = anchorPart }
+    end
+
+    local function removeESP(model)
+        if activeESPs[model] then
+            local eggName = activeESPs[model].EggName
+            if activeESPs[model].Connection then activeESPs[model].Connection:Disconnect() end
+            if activeESPs[model].AnchorPart then activeESPs[model].AnchorPart:Destroy() end
+            activeESPs[model] = nil
+
+            local stillExists = false
+            for _, data in pairs(activeESPs) do
+                if data.EggName == eggName then stillExists = true break end
+            end
+
+            if not stillExists then
+                if eggUiButtons[eggName] then
+                    eggUiButtons[eggName]:Destroy()
+                    eggUiButtons[eggName] = nil
+                end
+            end
+        end
+    end
+
+    if wildEggsFolder then
+        for _, child in ipairs(wildEggsFolder:GetChildren()) do addESP(child) end
+        table.insert(activeConnections, wildEggsFolder.ChildAdded:Connect(function(child) task.wait(0.1); addESP(child) end))
+        table.insert(activeConnections, wildEggsFolder.ChildRemoved:Connect(function(child) removeESP(child) end))
+    end
+
+
+    --// ESP 2: ACTIVE PUMPKINS
+    local activePumpkinsFolder
+    local successPumpkins = pcall(function()
+        activePumpkinsFolder = Workspace:WaitForChild("ActivePumpkins", 5)
+    end)
+
+    local function updatePumpkinESPVisibility()
+        for model, espData in pairs(activePumpkinESPs) do
+            if espData.AnchorPart and espData.AnchorPart.Parent then
+                local pName = espData.PumpkinName
+                local isEnabled = (pumpkinFilters[pName] == true)
+                if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+                if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+            end
+        end
+    end
+
+    local function addPumpkinESP(model)
+        if activePumpkinESPs[model] then return end
+        if not model:IsA("Model") then return end
+
+        local pName = model.Name
+        if pumpkinFilters[pName] == nil then pumpkinFilters[pName] = true end
+
+        local pumpkinColor = Color3.fromRGB(255, 140, 0)
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Size = UDim2.new(1, 0, 0, 32)
+        toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        toggleButton.Text = ""
+        toggleButton.AutoButtonColor = false
+        toggleButton.Parent = scrollingPumpkins
+        Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+        local checkIndicator = Instance.new("TextLabel")
+        checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+        checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+        checkIndicator.BackgroundTransparency = 1
+        checkIndicator.Text = pumpkinFilters[pName] and "✔" or ""
+        checkIndicator.TextColor3 = pumpkinFilters[pName] and pumpkinColor or Color3.fromRGB(120, 120, 120)
+        checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+        checkIndicator.Parent = toggleButton
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -85, 1, 0)
+        nameLabel.Position = UDim2.new(0, 32, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = tostring(pName)
+        nameLabel.TextColor3 = pumpkinFilters[pName] and pumpkinColor or Color3.fromRGB(120, 120, 120)
+        nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = toggleButton
+
+        local tpButton = Instance.new("TextButton")
+        tpButton.Size = UDim2.new(0, 45, 0, 22)
+        tpButton.Position = UDim2.new(1, -50, 0.5, -11)
+        tpButton.BackgroundColor3 = Color3.fromRGB(200, 100, 0)
+        tpButton.Text = "TP"
+        tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
+        tpButton.Parent = toggleButton
+        Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
+
+        pcall(function() model:RequestStreamAsync() end)
+
+        local anchorPart = Instance.new("Part")
+        anchorPart.Size = Vector3.new(1, 1, 1)
+        anchorPart.Transparency = 1
+        anchorPart.CanCollide = false
+        anchorPart.Anchored = true
+        anchorPart.CFrame = model:GetPivot()
+        anchorPart.Name = "Pumpkin_Anchor_" .. pName
+        anchorPart.Parent = Workspace
+
+        tpButton.MouseButton1Click:Connect(function()
+            if getgenv().PumpkinTPEnabled then
+                teleportToTarget(anchorPart)
+            end
+        end)
+
+        toggleButton.MouseButton1Click:Connect(function()
+            pumpkinFilters[pName] = not pumpkinFilters[pName]
+            if pumpkinFilters[pName] then
+                checkIndicator.Text = "✔"
+                checkIndicator.TextColor3, nameLabel.TextColor3 = pumpkinColor, pumpkinColor
+            else
+                checkIndicator.Text = ""
+                checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+            end
+            updatePumpkinESPVisibility()
+        end)
+
+        local isEnabled = (pumpkinFilters[pName] == true)
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Adornee = anchorPart
+        billboard.Size = UDim2.new(0, 120, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Enabled = isEnabled
+        billboard.Parent = anchorPart
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = pumpkinColor
+        textLabel.TextStrokeTransparency = 0.3
+        textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+        textLabel.Visible = isEnabled
+        textLabel.Parent = billboard
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            if not model or not model.Parent then
+                if renderConn then renderConn:Disconnect() end
+                return
+            end
+            local currentCf = model:GetPivot()
+            if currentCf.Position.Magnitude > 0 then
+                anchorPart.CFrame = currentCf
+            end
+
+            if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
+                textLabel.Text = pName .. "\n[" .. distance .. "m]"
+            end
+        end)
+
+        activePumpkinESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, PumpkinName = pName, AnchorPart = anchorPart }
+    end
+
+    local function removePumpkinESP(model)
+        if activePumpkinESPs[model] then
+            if activePumpkinESPs[model].Connection then activePumpkinESPs[model].Connection:Disconnect() end
+            if activePumpkinESPs[model].AnchorPart then activePumpkinESPs[model].AnchorPart:Destroy() end
+            if activePumpkinESPs[model].UiButton then activePumpkinESPs[model].UiButton:Destroy() end
+            activePumpkinESPs[model] = nil
+        end
+    end
+
+    if successPumpkins and activePumpkinsFolder then
+        for _, child in ipairs(activePumpkinsFolder:GetChildren()) do addPumpkinESP(child) end
+        table.insert(activeConnections, activePumpkinsFolder.ChildAdded:Connect(function(child) task.wait(0.1); addPumpkinESP(child) end))
+        table.insert(activeConnections, activePumpkinsFolder.ChildRemoved:Connect(function(child) removePumpkinESP(child) end))
+    end
+
+
+    --// ESP 3: KING KALOLO EGG
+    local kaloloBossFolder
+    local successKalolo = pcall(function()
+        kaloloBossFolder = Workspace:WaitForChild("KingKaloloBossRuntime", 5)
+    end)
+
+    local function updateKaloloESPVisibility()
+        for model, espData in pairs(activeKaloloESPs) do
+            if espData.AnchorPart and espData.AnchorPart.Parent then
+                local kName = espData.KaloloName
+                local isEnabled = (kaloloFilters[kName] == true)
+                if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+                if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+            end
+        end
+    end
+
+    local function addKaloloESP(model)
+        if activeKaloloESPs[model] then return end
+        if not model:IsA("Model") or model.Name ~= "KingKalolo Egg" then return end
+
+        local kName = model.Name
+        if kaloloFilters[kName] == nil then kaloloFilters[kName] = true end
+
+        local kaloloColor = Color3.fromRGB(170, 0, 255)
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Size = UDim2.new(1, 0, 0, 32)
+        toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        toggleButton.Text = ""
+        toggleButton.AutoButtonColor = false
+        toggleButton.Parent = scrollingKalolo
+        Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+        local checkIndicator = Instance.new("TextLabel")
+        checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+        checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+        checkIndicator.BackgroundTransparency = 1
+        checkIndicator.Text = kaloloFilters[kName] and "✔" or ""
+        checkIndicator.TextColor3 = kaloloFilters[kName] and kaloloColor or Color3.fromRGB(120, 120, 120)
+        checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+        checkIndicator.Parent = toggleButton
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -85, 1, 0)
+        nameLabel.Position = UDim2.new(0, 32, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = tostring(kName)
+        nameLabel.TextColor3 = kaloloFilters[kName] and kaloloColor or Color3.fromRGB(120, 120, 120)
+        nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = toggleButton
+
+        local tpButton = Instance.new("TextButton")
+        tpButton.Size = UDim2.new(0, 45, 0, 22)
+        tpButton.Position = UDim2.new(1, -50, 0.5, -11)
+        tpButton.BackgroundColor3 = Color3.fromRGB(120, 0, 200)
+        tpButton.Text = "TP"
+        tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
+        tpButton.Parent = toggleButton
+        Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
+
+        pcall(function() model:RequestStreamAsync() end)
+
+        local anchorPart = Instance.new("Part")
+        anchorPart.Size = Vector3.new(1, 1, 1)
+        anchorPart.Transparency = 1
+        anchorPart.CanCollide = false
+        anchorPart.Anchored = true
+        anchorPart.CFrame = model:GetPivot()
+        anchorPart.Name = "Kalolo_Anchor"
+        anchorPart.Parent = Workspace
+
+        tpButton.MouseButton1Click:Connect(function()
+            if getgenv().KaloloTPEnabled then
+                teleportToTarget(anchorPart)
+            end
+        end)
+
+        toggleButton.MouseButton1Click:Connect(function()
+            kaloloFilters[kName] = not kaloloFilters[kName]
+            if kaloloFilters[kName] then
+                checkIndicator.Text = "✔"
+                checkIndicator.TextColor3, nameLabel.TextColor3 = kaloloColor, kaloloColor
+            else
+                checkIndicator.Text = ""
+                checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+            end
+            updateKaloloESPVisibility()
+        end)
+
+        local isEnabled = (kaloloFilters[kName] == true)
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Adornee = anchorPart
+        billboard.Size = UDim2.new(0, 120, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Enabled = isEnabled
+        billboard.Parent = anchorPart
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = kaloloColor
+        textLabel.TextStrokeTransparency = 0.3
+        textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+        textLabel.Visible = isEnabled
+        textLabel.Parent = billboard
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            if not model or not model.Parent then
+                if renderConn then renderConn:Disconnect() end
+                return
+            end
+            local currentCf = model:GetPivot()
+            if currentCf.Position.Magnitude > 0 then
+                anchorPart.CFrame = currentCf
+            end
+
+            if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
+                textLabel.Text = kName .. "\n[" .. distance .. "m]"
+            end
+        end)
+
+        activeKaloloESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, KaloloName = kName, AnchorPart = anchorPart }
+    end
+
+    local function removeKaloloESP(model)
+        if activeKaloloESPs[model] then
+            if activeKaloloESPs[model].Connection then activeKaloloESPs[model].Connection:Disconnect() end
+            if activeKaloloESPs[model].AnchorPart then activeKaloloESPs[model].AnchorPart:Destroy() end
+            if activeKaloloESPs[model].UiButton then activeKaloloESPs[model].UiButton:Destroy() end
+            activeKaloloESPs[model] = nil
+        end
+    end
+
+    if successKalolo and kaloloBossFolder then
+        for _, desc in ipairs(kaloloBossFolder:GetDescendants()) do
+            if desc:IsA("Model") and desc.Name == "KingKalolo Egg" then
+                addKaloloESP(desc)
+            end
+        end
+        table.insert(activeConnections, kaloloBossFolder.DescendantAdded:Connect(function(desc)
+            if desc:IsA("Model") and desc.Name == "KingKalolo Egg" then
+                task.wait(0.1)
+                addKaloloESP(desc)
+            end
+        end))
+        table.insert(activeConnections, kaloloBossFolder.DescendantRemoving:Connect(function(desc)
+            if desc:IsA("Model") then
+                removeKaloloESP(desc)
+            end
+        end))
+    end
+    
+    --// ESP 4: GOLEM EGG DARI DEEP GOLEM BOSS RUNTIME
+    local golemBossFolder
+    local successGolem = pcall(function()
+        golemBossFolder = Workspace:WaitForChild("DeepGolemBossRuntime", 5)
+    end)
+
+    local function updateGolemESPVisibility()
+        for model, espData in pairs(activeGolemESPs) do
+            if espData.AnchorPart and espData.AnchorPart.Parent then
+                local gName = espData.GolemName
+                local isEnabled = (golemFilters[gName] == true)
+                if espData.Billboard then espData.Billboard.Enabled = isEnabled end
+                if espData.TextLabel then espData.TextLabel.Visible = isEnabled end
+            end
+        end
+    end
+
+    local function addGolemESP(model)
+        if activeGolemESPs[model] then return end
+        if not model:IsA("Model") or model.Name ~= "Golem Egg" then return end
+
+        local gName = model.Name
+        if golemFilters[gName] == nil then golemFilters[gName] = true end
+
+        local golemColor = Color3.fromRGB(0, 255, 255)
+        local toggleButton = Instance.new("TextButton")
+        toggleButton.Size = UDim2.new(1, 0, 0, 32)
+        toggleButton.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+        toggleButton.Text = ""
+        toggleButton.AutoButtonColor = false
+        toggleButton.Parent = scrollingGolem
+        Instance.new("UICorner", toggleButton).CornerRadius = UDim.new(0, 6)
+
+        local checkIndicator = Instance.new("TextLabel")
+        checkIndicator.Size = UDim2.new(0, 25, 1, 0)
+        checkIndicator.Position = UDim2.new(0, 5, 0, 0)
+        checkIndicator.BackgroundTransparency = 1
+        checkIndicator.Text = golemFilters[gName] and "✔" or ""
+        checkIndicator.TextColor3 = golemFilters[gName] and golemColor or Color3.fromRGB(120, 120, 120)
+        checkIndicator.TextSize, checkIndicator.Font = 14, Enum.Font.GothamBold
+        checkIndicator.Parent = toggleButton
+
+        local nameLabel = Instance.new("TextLabel")
+        nameLabel.Size = UDim2.new(1, -85, 1, 0)
+        nameLabel.Position = UDim2.new(0, 32, 0, 0)
+        nameLabel.BackgroundTransparency = 1
+        nameLabel.Text = tostring(gName)
+        nameLabel.TextColor3 = golemFilters[gName] and golemColor or Color3.fromRGB(120, 120, 120)
+        nameLabel.TextSize, nameLabel.Font = 12, Enum.Font.GothamBold
+        nameLabel.TextXAlignment = Enum.TextXAlignment.Left
+        nameLabel.Parent = toggleButton
+
+        local tpButton = Instance.new("TextButton")
+        tpButton.Size = UDim2.new(0, 45, 0, 22)
+        tpButton.Position = UDim2.new(1, -50, 0.5, -11)
+        tpButton.BackgroundColor3 = Color3.fromRGB(0, 150, 150)
+        tpButton.Text = "TP"
+        tpButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+        tpButton.TextSize, tpButton.Font = 11, Enum.Font.GothamBold
+        tpButton.Parent = toggleButton
+        Instance.new("UICorner", tpButton).CornerRadius = UDim.new(0, 4)
+
+        pcall(function() model:RequestStreamAsync() end)
+
+        local anchorPart = Instance.new("Part")
+        anchorPart.Size = Vector3.new(1, 1, 1)
+        anchorPart.Transparency = 1
+        anchorPart.CanCollide = false
+        anchorPart.Anchored = true
+        anchorPart.CFrame = model:GetPivot()
+        anchorPart.Name = "Golem_Anchor"
+        anchorPart.Parent = Workspace
+
+        tpButton.MouseButton1Click:Connect(function()
+            if getgenv().GolemTPEnabled then
+                teleportToTarget(anchorPart)
+            end
+        end)
+
+        toggleButton.MouseButton1Click:Connect(function()
+            golemFilters[gName] = not golemFilters[gName]
+            if golemFilters[gName] then
+                checkIndicator.Text = "✔"
+                checkIndicator.TextColor3, nameLabel.TextColor3 = golemColor, golemColor
+            else
+                checkIndicator.Text = ""
+                checkIndicator.TextColor3, nameLabel.TextColor3 = Color3.fromRGB(120, 120, 120), Color3.fromRGB(120, 120, 120)
+            end
+            updateGolemESPVisibility()
+        end)
+
+        local isEnabled = (golemFilters[gName] == true)
+
+        local billboard = Instance.new("BillboardGui")
+        billboard.Adornee = anchorPart
+        billboard.Size = UDim2.new(0, 120, 0, 40)
+        billboard.StudsOffset = Vector3.new(0, 3, 0)
+        billboard.AlwaysOnTop = true
+        billboard.Enabled = isEnabled
+        billboard.Parent = anchorPart
+
+        local textLabel = Instance.new("TextLabel")
+        textLabel.Size = UDim2.new(1, 0, 1, 0)
+        textLabel.BackgroundTransparency = 1
+        textLabel.TextColor3 = golemColor
+        textLabel.TextStrokeTransparency = 0.3
+        textLabel.TextSize, textLabel.Font = 12, Enum.Font.GothamBold
+        textLabel.Visible = isEnabled
+        textLabel.Parent = billboard
+
+        local renderConn
+        renderConn = RunService.RenderStepped:Connect(function()
+            if not model or not model.Parent then
+                if renderConn then renderConn:Disconnect() end
+                return
+            end
+            local currentCf = model:GetPivot()
+            if currentCf.Position.Magnitude > 0 then
+                anchorPart.CFrame = currentCf
+            end
+
+            if billboard.Enabled and textLabel.Visible and player.Character and player.Character:FindFirstChild("HumanoidRootPart") then
+                local hrp = player.Character.HumanoidRootPart
+                local distance = math.floor((hrp.Position - anchorPart.Position).Magnitude)
+                textLabel.Text = gName .. "\n[" .. distance .. "m]"
+            end
+        end)
+
+        activeGolemESPs[model] = { Billboard = billboard, TextLabel = textLabel, Connection = renderConn, UiButton = toggleButton, GolemName = gName, AnchorPart = anchorPart }
+    end
+
+    local function removeGolemESP(model)
+        if activeGolemESPs[model] then
+            if activeGolemESPs[model].Connection then activeGolemESPs[model].Connection:Disconnect() end
+            if activeGolemESPs[model].AnchorPart then activeGolemESPs[model].AnchorPart:Destroy() end
+            if activeGolemESPs[model].UiButton then activeGolemESPs[model].UiButton:Destroy() end
+            activeGolemESPs[model] = nil
+        end
+    end
+
+    if successGolem and golemBossFolder then
+        for _, desc in ipairs(golemBossFolder:GetDescendants()) do
+            if desc:IsA("Model") and desc.Name == "Golem Egg" then
+                addGolemESP(desc)
+            end
+        end
+        table.insert(activeConnections, golemBossFolder.DescendantAdded:Connect(function(desc)
+            if desc:IsA("Model") and desc.Name == "Golem Egg" then
+                task.wait(0.1)
+                addGolemESP(desc)
+            end
+        end))
+        table.insert(activeConnections, golemBossFolder.DescendantRemoving:Connect(function(desc)
+            if desc:IsA("Model") then
+                removeGolemESP(desc)
+            end
+        end))
+    end
 end)
 
 
 --// --- FITUR BARU: SPECTATOR MODE & DYNAMIC STREAMING BYPASS ---
 local function updateSpectateList()
-	for _, btn in pairs(spectateUiButtons) do
-		if btn then btn:Destroy() end
-	end
-	table.clear(spectateUiButtons)
+    for _, btn in pairs(spectateUiButtons) do
+        if btn then btn:Destroy() end
+    end
+    table.clear(spectateUiButtons)
 
-	for _, p in ipairs(Players:GetPlayers()) do
-		if p ~= player then
-			local pBtn = Instance.new("TextButton")
-			pBtn.Size = UDim2.new(1, 0, 0, 30)
-			pBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-			pBtn.Text = "Spectate: " .. p.Name
-			pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-			pBtn.TextSize, pBtn.Font = 11, Enum.Font.GothamBold
-			pBtn.Parent = scrollingSpectate
-			Instance.new("UICorner", pBtn).CornerRadius = UDim.new(0, 6)
+    for _, p in ipairs(Players:GetPlayers()) do
+        if p ~= player then
+            local pBtn = Instance.new("TextButton")
+            pBtn.Size = UDim2.new(1, 0, 0, 30)
+            pBtn.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+            pBtn.Text = "Spectate: " .. p.Name
+            pBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+            pBtn.TextSize, pBtn.Font = 11, Enum.Font.GothamBold
+            pBtn.Parent = scrollingSpectate
+            Instance.new("UICorner", pBtn).CornerRadius = UDim.new(0, 6)
 
-			pBtn.MouseButton1Click:Connect(function()
-				getgenv().SpectatingPlayer = p
-				stopSpectateBtn.Text = "SPECTATING: " .. p.Name
-			end)
+            pBtn.MouseButton1Click:Connect(function()
+                getgenv().SpectatingPlayer = p
+                stopSpectateBtn.Text = "SPECTATING: " .. p.Name
+            end)
 
-			spectateUiButtons[p] = pBtn
-		end
-	end
+            spectateUiButtons[p] = pBtn
+        end
+    end
 end
 
 updateSpectateList()
@@ -1022,24 +1493,24 @@ table.insert(activeConnections, Players.PlayerRemoving:Connect(updateSpectateLis
 
 -- Logika Utama Spectator (Auto-Lock Arah Depan, Zoom, & Dynamic Streaming Force Render)
 table.insert(activeConnections, RunService.RenderStepped:Connect(function()
-	local targetP = getgenv().SpectatingPlayer
-	if targetP and targetP.Character and targetP.Character:FindFirstChild("HumanoidRootPart") then
-		local tHrp = targetP.Character.HumanoidRootPart
-		
-		-- Paksa server me-render area di sekitar target yang sedang di-spectate (Bypass Streaming Jarak Jauh)
-		pcall(function()
-			Workspace:RequestStreamAsync(tHrp.Position)
-		end)
+    local targetP = getgenv().SpectatingPlayer
+    if targetP and targetP.Character and targetP.Character:FindFirstChild("HumanoidRootPart") then
+        local tHrp = targetP.Character.HumanoidRootPart
+        
+        -- Paksa server me-render area di sekitar target yang sedang di-spectate (Bypass Streaming Jarak Jauh)
+        pcall(function()
+            Workspace:RequestStreamAsync(tHrp.Position)
+        end)
 
-		camera.CameraType = Enum.CameraType.Scriptable
+        camera.CameraType = Enum.CameraType.Scriptable
 
-		-- Kamera mengunci ke belakang player target menghadap ke arah depan (LookVector) sesuai zoom
-		local targetPos = tHrp.Position
-		local lookVector = tHrp.CFrame.LookVector
-		
-		-- Posisikan kamera di belakang player target dengan jarak zoom yang disesuaikan
-		local camPos = targetPos - (lookVector * getgenv().SpectateZoom) + Vector3.new(0, getgenv().SpectateZoom * 0.4, 0)
-		
-		camera.CFrame = CFrame.new(camPos, targetPos + Vector3.new(0, 2, 0))
-	end
+        -- Kamera mengunci ke belakang player target menghadap ke arah depan (LookVector) sesuai zoom
+        local targetPos = tHrp.Position
+        local lookVector = tHrp.CFrame.LookVector
+        
+        -- Posisikan kamera di belakang player target dengan jarak zoom yang disesuaikan
+        local camPos = targetPos - (lookVector * getgenv().SpectateZoom) + Vector3.new(0, getgenv().SpectateZoom * 0.4, 0)
+        
+        camera.CFrame = CFrame.new(camPos, targetPos + Vector3.new(0, 2, 0))
+    end
 end))
