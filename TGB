@@ -1,0 +1,342 @@
+-- ==========================================
+-- 🚀 BLUBUB HUB V7 - THE ULTIMATE BOSS EDITION
+-- ==========================================
+
+local CoreGui = game:GetService("CoreGui")
+local Players = game:GetService("Players")
+local TweenService = game:GetService("TweenService")
+local RunService = game:GetService("RunService")
+local Workspace = game:GetService("Workspace")
+local UserInputService = game:GetService("UserInputService")
+local HttpService = game:GetService("HttpService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local VirtualUser = game:GetService("VirtualUser")
+
+local player = Players.LocalPlayer
+local folderSerangga = Workspace:WaitForChild("SeranggaLiar", 10)
+local folderBos = Workspace:WaitForChild("BosDunia", 10) -- Folder boss baru ditambahkan
+local namaSenjata = "Staf Lv11" 
+
+-- [ MEMBERSIHKAN INSTANCE LAMA ]
+if getgenv().BlububHubV6 then getgenv().BlububHubV6:Destroy() end
+if getgenv().BlububHubV7 then getgenv().BlububHubV7:Destroy() end
+if getgenv().AALoop then getgenv().AALoop:Disconnect() end
+if getgenv().FALoop then getgenv().FALoop:Disconnect() end
+if getgenv().ACLoop then task.cancel(getgenv().ACLoop) end
+
+-- ==========================================
+-- 💾 SISTEM PENYIMPANAN PENGATURAN (SMART CONFIG LOCK)
+-- ==========================================
+local ConfigFile = "BlububHub_Settings.json"
+local SrvFile = "RiwayatServer_" .. game.PlaceId .. ".json"
+
+local function LoadConfig()
+    local default = {
+        JarakBelakang = 20, 
+        JarakTinggi = 15,  
+        TargetPilihan = "Semua Target",
+        FastAttackAktif = false,
+        FastAttackSpeed = 5,
+        AutoClickDelay = 10
+    }
+    
+    if isfile and isfile(ConfigFile) then
+        local success, result = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
+        if success and type(result) == "table" then
+            for k, v in pairs(default) do
+                if result[k] == nil then result[k] = v end
+            end
+            return result
+        end
+    end
+    return default
+end
+
+local Config = LoadConfig()
+getgenv().AutoAttackAktif = getgenv().AutoAttackAktif or false 
+getgenv().AutoClickAktif = getgenv().AutoClickAktif or false
+
+local function SaveConfig()
+    if writefile then pcall(function() writefile(ConfigFile, HttpService:JSONEncode(Config)) end) end
+end
+
+-- ==========================================
+-- 🛡️ SISTEM ANTI-AFK (PASTI WORK)
+-- ==========================================
+if getgenv().AntiAfkConn then getgenv().AntiAfkConn:Disconnect() end
+getgenv().AntiAfkConn = player.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
+
+-- ==========================================
+-- 🎨 PEMBUATAN UI SUPER MODERN
+-- ==========================================
+local ScreenGui = Instance.new("ScreenGui")
+ScreenGui.Name = "BlububHubV7"
+ScreenGui.ResetOnSpawn = false
+ScreenGui.Parent = (pcall(function() return CoreGui.Name end) and CoreGui) or player:WaitForChild("PlayerGui")
+getgenv().BlububHubV7 = ScreenGui
+
+-- ICON MINIMIZE
+local MinIcon = Instance.new("TextButton", ScreenGui)
+MinIcon.Size = UDim2.new(0, 45, 0, 45); MinIcon.Position = UDim2.new(0.05, 0, 0.1, 0); MinIcon.BackgroundColor3 = Color3.fromRGB(15, 15, 20); MinIcon.Text = "⚡"; MinIcon.TextSize = 20; MinIcon.Visible = false; MinIcon.Draggable = true; Instance.new("UICorner", MinIcon).CornerRadius = UDim.new(0, 10); Instance.new("UIStroke", MinIcon).Color = Color3.fromRGB(0, 200, 255); Instance.new("UIStroke", MinIcon).Thickness = 2
+
+-- MAIN FRAME
+local MainFrame = Instance.new("Frame", ScreenGui)
+MainFrame.Size = UDim2.new(0, 360, 0, 520) 
+MainFrame.Position = UDim2.new(0.5, -180, 0.2, 0); MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24); MainFrame.BorderSizePixel = 0; MainFrame.ClipsDescendants = true; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12); Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(0, 200, 255); Instance.new("UIStroke", MainFrame).Thickness = 2
+
+-- DRAG & RESIZE LOGIC
+local dragInput, dragStart, startPos
+MainFrame.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then dragStart = input.Position; startPos = MainFrame.Position; input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragStart = nil end end) end end)
+UserInputService.InputChanged:Connect(function(input) if dragStart and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local delta = input.Position - dragStart; MainFrame.Position = UDim2.new(startPos.X.Scale, startPos.X.Offset + delta.X, startPos.Y.Scale, startPos.Y.Offset + delta.Y) end end)
+
+local ResizeBtn = Instance.new("TextButton", MainFrame); ResizeBtn.Size = UDim2.new(0, 20, 0, 20); ResizeBtn.Position = UDim2.new(1, -20, 1, -20); ResizeBtn.BackgroundTransparency = 1; ResizeBtn.Text = "↘"; ResizeBtn.TextColor3 = Color3.fromRGB(150, 150, 150); ResizeBtn.TextSize = 18
+local isResizing, resizeStart, startSize
+ResizeBtn.InputBegan:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isResizing = true; resizeStart = input.Position; startSize = MainFrame.Size end end)
+UserInputService.InputChanged:Connect(function(input) if isResizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then local delta = input.Position - resizeStart; MainFrame.Size = UDim2.new(0, math.max(340, startSize.X.Offset + delta.X), 0, math.max(480, startSize.Y.Offset + delta.Y)) end end)
+UserInputService.InputEnded:Connect(function(input) if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then isResizing = false end end)
+
+-- HEADER
+local Header = Instance.new("Frame", MainFrame); Header.Size = UDim2.new(1, 0, 0, 40); Header.BackgroundTransparency = 1
+local Title = Instance.new("TextLabel", Header); Title.Size = UDim2.new(0.8, 0, 1, 0); Title.Position = UDim2.new(0.05, 0, 0, 0); Title.BackgroundTransparency = 1; Title.Text = "BLUBUB HUB V7 (BOSS)"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 17; Title.TextXAlignment = Enum.TextXAlignment.Left
+local CloseBtn = Instance.new("TextButton", Header); CloseBtn.Size = UDim2.new(0, 30, 0, 30); CloseBtn.Position = UDim2.new(1, -40, 0, 5); CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60); CloseBtn.Text = "-"; CloseBtn.TextColor3 = Color3.new(1,1,1); CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 20; Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
+
+CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false; MinIcon.Visible = true end)
+MinIcon.MouseButton1Click:Connect(function() MainFrame.Visible = true; MinIcon.Visible = false end)
+
+-- TABS
+local TabContainer = Instance.new("Frame", MainFrame); TabContainer.Size = UDim2.new(1, 0, 0, 35); TabContainer.Position = UDim2.new(0, 0, 0, 40); TabContainer.BackgroundTransparency = 1
+local CombatTabBtn = Instance.new("TextButton", TabContainer); CombatTabBtn.Size = UDim2.new(0.5, 0, 1, 0); CombatTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45); CombatTabBtn.Text = "⚔️ Combat"; CombatTabBtn.TextColor3 = Color3.new(1,1,1); CombatTabBtn.Font = Enum.Font.GothamBold
+local ServerTabBtn = Instance.new("TextButton", TabContainer); ServerTabBtn.Size = UDim2.new(0.5, 0, 1, 0); ServerTabBtn.Position = UDim2.new(0.5, 0, 0, 0); ServerTabBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 30); ServerTabBtn.Text = "🌍 Server Hop"; ServerTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150); ServerTabBtn.Font = Enum.Font.GothamBold
+
+local CombatFrame = Instance.new("Frame", MainFrame); CombatFrame.Size = UDim2.new(1, 0, 1, -75); CombatFrame.Position = UDim2.new(0, 0, 0, 75); CombatFrame.BackgroundTransparency = 1
+local ServerFrame = Instance.new("Frame", MainFrame); ServerFrame.Size = UDim2.new(1, 0, 1, -75); ServerFrame.Position = UDim2.new(0, 0, 0, 75); ServerFrame.BackgroundTransparency = 1; ServerFrame.Visible = false
+
+CombatTabBtn.MouseButton1Click:Connect(function() CombatFrame.Visible = true; ServerFrame.Visible = false; CombatTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45); CombatTabBtn.TextColor3 = Color3.new(1,1,1); ServerTabBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 30); ServerTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150) end)
+ServerTabBtn.MouseButton1Click:Connect(function() CombatFrame.Visible = false; ServerFrame.Visible = true; ServerTabBtn.BackgroundColor3 = Color3.fromRGB(35, 35, 45); ServerTabBtn.TextColor3 = Color3.new(1,1,1); CombatTabBtn.BackgroundColor3 = Color3.fromRGB(22, 22, 30); CombatTabBtn.TextColor3 = Color3.fromRGB(150, 150, 150) end)
+
+-- ==========================================
+-- ⚔️ ISI TAB COMBAT
+-- ==========================================
+local function createAdjustment(parent, name, yPos, configKey, onUpdate)
+    local Label = Instance.new("TextLabel", parent); Label.Size = UDim2.new(0.4, 0, 0, 30); Label.Position = UDim2.new(0.05, 0, 0, yPos); Label.BackgroundTransparency = 1; Label.Text = name; Label.TextColor3 = Color3.fromRGB(220, 220, 220); Label.Font = Enum.Font.GothamSemibold; Label.TextSize = 13; Label.TextXAlignment = Enum.TextXAlignment.Left
+    local BtnMin = Instance.new("TextButton", parent); BtnMin.Size = UDim2.new(0, 30, 0, 30); BtnMin.Position = UDim2.new(0.55, 0, 0, yPos); BtnMin.BackgroundColor3 = Color3.fromRGB(45, 45, 55); BtnMin.Text = "-"; BtnMin.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", BtnMin).CornerRadius = UDim.new(0, 6)
+    local ValLabel = Instance.new("TextLabel", parent); ValLabel.Size = UDim2.new(0, 40, 0, 30); ValLabel.Position = UDim2.new(0.68, 0, 0, yPos); ValLabel.BackgroundTransparency = 1; ValLabel.Text = tostring(Config[configKey]); ValLabel.TextColor3 = Color3.new(1,1,1); ValLabel.Font = Enum.Font.GothamBold
+    local BtnPlus = Instance.new("TextButton", parent); BtnPlus.Size = UDim2.new(0, 30, 0, 30); BtnPlus.Position = UDim2.new(0.82, 0, 0, yPos); BtnPlus.BackgroundColor3 = Color3.fromRGB(45, 45, 55); BtnPlus.Text = "+"; BtnPlus.TextColor3 = Color3.new(1,1,1); Instance.new("UICorner", BtnPlus).CornerRadius = UDim.new(0, 6)
+
+    BtnMin.MouseButton1Click:Connect(function() Config[configKey] = Config[configKey] - 1; ValLabel.Text = tostring(Config[configKey]); SaveConfig(); if onUpdate then onUpdate() end end)
+    BtnPlus.MouseButton1Click:Connect(function() Config[configKey] = Config[configKey] + 1; ValLabel.Text = tostring(Config[configKey]); SaveConfig(); if onUpdate then onUpdate() end end)
+    return Label
+end
+
+createAdjustment(CombatFrame, "Jauh / Dekat (Z)", 5, "JarakBelakang")
+createAdjustment(CombatFrame, "Atas / Bawah (Y)", 40, "JarakTinggi")
+
+-- TOGGLE SPEED ATTACK
+local FALabel = createAdjustment(CombatFrame, "Speed Attack", 80, "FastAttackSpeed"); FALabel.Size = UDim2.new(0.25, 0, 0, 30)
+local FAToggleBtn = Instance.new("TextButton", CombatFrame); FAToggleBtn.Size = UDim2.new(0, 60, 0, 30); FAToggleBtn.Position = UDim2.new(0.32, 0, 0, 80); FAToggleBtn.BackgroundColor3 = Config.FastAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); FAToggleBtn.Text = Config.FastAttackAktif and "ON" or "OFF"; FAToggleBtn.TextColor3 = Color3.new(1,1,1); FAToggleBtn.Font = Enum.Font.GothamBold; FAToggleBtn.TextSize = 12; Instance.new("UICorner", FAToggleBtn).CornerRadius = UDim.new(0, 6)
+FAToggleBtn.MouseButton1Click:Connect(function() Config.FastAttackAktif = not Config.FastAttackAktif; FAToggleBtn.BackgroundColor3 = Config.FastAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); FAToggleBtn.Text = Config.FastAttackAktif and "ON" or "OFF"; SaveConfig() end)
+
+-- TOGGLE AUTO CLICKER
+local ACLabel = createAdjustment(CombatFrame, "Auto Click (ms)", 120, "AutoClickDelay"); ACLabel.Size = UDim2.new(0.25, 0, 0, 30)
+local ACToggleBtn = Instance.new("TextButton", CombatFrame); ACToggleBtn.Size = UDim2.new(0, 60, 0, 30); ACToggleBtn.Position = UDim2.new(0.32, 0, 0, 120); ACToggleBtn.BackgroundColor3 = getgenv().AutoClickAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); ACToggleBtn.Text = getgenv().AutoClickAktif and "ON" or "OFF"; ACToggleBtn.TextColor3 = Color3.new(1,1,1); ACToggleBtn.Font = Enum.Font.GothamBold; ACToggleBtn.TextSize = 12; Instance.new("UICorner", ACToggleBtn).CornerRadius = UDim.new(0, 6)
+ACToggleBtn.MouseButton1Click:Connect(function() getgenv().AutoClickAktif = not getgenv().AutoClickAktif; ACToggleBtn.BackgroundColor3 = getgenv().AutoClickAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); ACToggleBtn.Text = getgenv().AutoClickAktif and "ON" or "OFF" end)
+
+-- SEARCH BAR & TARGET LIST (MENDUKUNG BOSS)
+local SearchBox = Instance.new("TextBox", CombatFrame); SearchBox.Size = UDim2.new(0.9, 0, 0, 35); SearchBox.Position = UDim2.new(0.05, 0, 0, 165); SearchBox.BackgroundColor3 = Color3.fromRGB(30, 30, 40); SearchBox.PlaceholderText = "🔍 Cari monster / boss..."; SearchBox.Text = ""; SearchBox.TextColor3 = Color3.new(1,1,1); SearchBox.Font = Enum.Font.Gotham; SearchBox.TextSize = 13; Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 6)
+
+local TargetScroll = Instance.new("ScrollingFrame", CombatFrame); TargetScroll.Size = UDim2.new(0.9, 0, 1, -275); TargetScroll.Position = UDim2.new(0.05, 0, 0, 210); TargetScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 30); TargetScroll.BorderSizePixel = 0; TargetScroll.ScrollBarThickness = 5; TargetScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 200, 255); Instance.new("UICorner", TargetScroll).CornerRadius = UDim.new(0, 8)
+local UIListLayout = Instance.new("UIListLayout", TargetScroll); UIListLayout.SortOrder = Enum.SortOrder.LayoutOrder; UIListLayout.Padding = UDim.new(0, 4)
+
+local function UpdateTargetList(filterText)
+    filterText = filterText and string.lower(filterText) or ""
+    for _, child in pairs(TargetScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
+
+    local uniqueTargets = {["Semua Target"] = "Universal"}
+    
+    -- Memasukkan Serangga
+    if folderSerangga then 
+        for _, serangga in ipairs(folderSerangga:GetChildren()) do uniqueTargets[serangga.Name] = "Monster" end 
+    end
+    -- Memasukkan Boss (NagaSerangga dan lainnya di folder BosDunia)
+    if folderBos then 
+        for _, boss in ipairs(folderBos:GetChildren()) do uniqueTargets[boss.Name] = "Boss" end 
+    end
+
+    local sortedTargets = {}
+    for name, _ in pairs(uniqueTargets) do if filterText == "" or string.find(string.lower(name), filterText) then table.insert(sortedTargets, name) end end
+    table.sort(sortedTargets)
+
+    local ySize = 0
+    for _, tName in ipairs(sortedTargets) do
+        local isSelected = (Config.TargetPilihan == tName)
+        local isBoss = (uniqueTargets[tName] == "Boss")
+        
+        local btn = Instance.new("TextButton", TargetScroll); btn.Size = UDim2.new(1, -10, 0, 35); btn.Position = UDim2.new(0, 5, 0, 0); btn.BackgroundColor3 = isSelected and Color3.fromRGB(40, 70, 110) or Color3.fromRGB(35, 35, 45); btn.Text = ""; btn.AutoButtonColor = false; Instance.new("UICorner", btn).CornerRadius = UDim.new(0, 8)
+        
+        if isSelected then local stroke = Instance.new("UIStroke", btn); stroke.Color = Color3.fromRGB(0, 200, 255); stroke.Thickness = 1.5 end
+        
+        -- Custom Tampilan UI Khusus Boss
+        local textLabel = Instance.new("TextLabel", btn); textLabel.Size = UDim2.new(1, 0, 1, 0); textLabel.BackgroundTransparency = 1
+        local iconPrefix = isBoss and "👹 " or ""
+        local selectedPrefix = isSelected and "⚡ " or ""
+        
+        textLabel.Text = selectedPrefix .. iconPrefix .. tName
+        
+        -- Pewarnaan Text (Boss jadi merah terang agar beda)
+        if isBoss then
+            textLabel.TextColor3 = isSelected and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(255, 50, 50)
+        else
+            textLabel.TextColor3 = isSelected and Color3.fromRGB(0, 220, 255) or Color3.fromRGB(200, 200, 200)
+        end
+        
+        textLabel.Font = isSelected and Enum.Font.GothamBold or Enum.Font.GothamSemibold; textLabel.TextSize = 13; textLabel.TextXAlignment = Enum.TextXAlignment.Left
+        local padding = Instance.new("UIPadding", textLabel); padding.PaddingLeft = UDim.new(0, 12)
+        
+        btn.MouseEnter:Connect(function() if not isSelected then TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 55)}):Play() end end)
+        btn.MouseLeave:Connect(function() if not isSelected then TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}):Play() end end)
+        
+        btn.MouseButton1Click:Connect(function() Config.TargetPilihan = tName; SaveConfig(); UpdateTargetList(SearchBox.Text) end)
+        ySize = ySize + 39
+    end
+    TargetScroll.CanvasSize = UDim2.new(0, 0, 0, ySize)
+end
+
+SearchBox.Changed:Connect(function(prop) if prop == "Text" then UpdateTargetList(SearchBox.Text) end end)
+-- Realtime Refresh untuk Serangga dan Boss
+if folderSerangga then folderSerangga.ChildAdded:Connect(function() UpdateTargetList(SearchBox.Text) end); folderSerangga.ChildRemoved:Connect(function() UpdateTargetList(SearchBox.Text) end) end
+if folderBos then folderBos.ChildAdded:Connect(function() UpdateTargetList(SearchBox.Text) end); folderBos.ChildRemoved:Connect(function() UpdateTargetList(SearchBox.Text) end) end
+UpdateTargetList("")
+
+local MainToggleBtn = Instance.new("TextButton", CombatFrame); MainToggleBtn.Size = UDim2.new(0.9, 0, 0, 45); MainToggleBtn.Position = UDim2.new(0.05, 0, 1, -55); MainToggleBtn.BackgroundColor3 = getgenv().AutoAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); MainToggleBtn.Text = getgenv().AutoAttackAktif and "STOP AUTO ATTACK" or "START AUTO ATTACK"; MainToggleBtn.TextColor3 = Color3.new(1,1,1); MainToggleBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", MainToggleBtn).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", MainToggleBtn).Thickness = 2
+MainToggleBtn.MouseButton1Click:Connect(function() getgenv().AutoAttackAktif = not getgenv().AutoAttackAktif; local targetColor = getgenv().AutoAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); TweenService:Create(MainToggleBtn, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play(); MainToggleBtn.Text = getgenv().AutoAttackAktif and "STOP AUTO ATTACK" or "START AUTO ATTACK" end)
+
+-- ==========================================
+-- 🌍 TAB SERVER HOPPER
+-- ==========================================
+local RefreshSrvBtn = Instance.new("TextButton", ServerFrame); RefreshSrvBtn.Size = UDim2.new(0.4, 0, 0, 35); RefreshSrvBtn.Position = UDim2.new(0.05, 0, 0, 10); RefreshSrvBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255); RefreshSrvBtn.Text = "Refresh"; RefreshSrvBtn.TextColor3 = Color3.new(1,1,1); RefreshSrvBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", RefreshSrvBtn).CornerRadius = UDim.new(0, 6)
+local ResetSrvBtn = Instance.new("TextButton", ServerFrame); ResetSrvBtn.Size = UDim2.new(0.4, 0, 0, 35); ResetSrvBtn.Position = UDim2.new(0.55, 0, 0, 10); ResetSrvBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 50); ResetSrvBtn.Text = "Reset Tanda"; ResetSrvBtn.TextColor3 = Color3.new(1,1,1); ResetSrvBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", ResetSrvBtn).CornerRadius = UDim.new(0, 6)
+
+local SrvScroll = Instance.new("ScrollingFrame", ServerFrame); SrvScroll.Size = UDim2.new(0.9, 0, 1, -70); SrvScroll.Position = UDim2.new(0.05, 0, 0, 55); SrvScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 30); SrvScroll.BorderSizePixel = 0; SrvScroll.ScrollBarThickness = 5; Instance.new("UICorner", SrvScroll).CornerRadius = UDim.new(0, 8)
+local SrvLayout = Instance.new("UIListLayout", SrvScroll); SrvLayout.SortOrder = Enum.SortOrder.LayoutOrder; SrvLayout.Padding = UDim.new(0, 5)
+
+local function getVisitedServers() if isfile and isfile(SrvFile) then local s, r = pcall(function() return HttpService:JSONDecode(readfile(SrvFile)) end) if s and type(r)=="table" then return r end end return {} end
+local function LoadServers()
+    for _, child in pairs(SrvScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
+    local s, r = pcall(function() return game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100") end)
+    if s and r then
+        local data = HttpService:JSONDecode(r).data; local visited = getVisitedServers(); local ySize = 0
+        for _, srv in ipairs(data) do
+            if srv.playing < srv.maxPlayers then
+                local isVisited = visited[srv.id]
+                local sItem = Instance.new("Frame", SrvScroll); sItem.Size = UDim2.new(1, 0, 0, 45); sItem.BackgroundColor3 = isVisited and Color3.fromRGB(50, 25, 25) or Color3.fromRGB(35, 35, 45); Instance.new("UICorner", sItem).CornerRadius = UDim.new(0, 6)
+                local sLabel = Instance.new("TextLabel", sItem); sLabel.Size = UDim2.new(0.7, 0, 1, 0); sLabel.Position = UDim2.new(0.05, 0, 0, 0); sLabel.BackgroundTransparency = 1; sLabel.Text = string.format("Pemain: %d/%d | Ping: %dms %s", srv.playing, srv.maxPlayers, srv.ping, (isVisited and "\n[SUDAH DIMASUKI]" or "")); sLabel.TextColor3 = isVisited and Color3.fromRGB(255, 120, 120) or Color3.new(1,1,1); sLabel.Font = Enum.Font.Gotham; sLabel.TextSize = 11; sLabel.TextXAlignment = Enum.TextXAlignment.Left
+                local JoinBtn = Instance.new("TextButton", sItem); JoinBtn.Size = UDim2.new(0.2, 0, 0.7, 0); JoinBtn.Position = UDim2.new(0.75, 0, 0.15, 0); JoinBtn.BackgroundColor3 = Color3.fromRGB(0, 180, 90); JoinBtn.Text = "Join"; JoinBtn.TextColor3 = Color3.new(1,1,1); JoinBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", JoinBtn).CornerRadius = UDim.new(0, 6)
+                JoinBtn.MouseButton1Click:Connect(function() visited[srv.id] = true; pcall(function() writefile(SrvFile, HttpService:JSONEncode(visited)) end); JoinBtn.Text = "Joining..."; TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, player) end)
+                ySize = ySize + 50
+            end
+        end
+        SrvScroll.CanvasSize = UDim2.new(0, 0, 0, ySize)
+    end
+end
+RefreshSrvBtn.MouseButton1Click:Connect(LoadServers)
+ResetSrvBtn.MouseButton1Click:Connect(function() pcall(function() writefile(SrvFile, "{}") end); LoadServers() end)
+
+-- ==========================================
+-- ⚙️ LOGIKA ENGINE (AUTO ATTACK & BOSS DETECTOR)
+-- ==========================================
+local function equipSenjata()
+    local char = player.Character
+    if not char then return nil end
+    local humanoid = char:FindFirstChild("Humanoid")
+    local alat = player.Backpack:FindFirstChild(namaSenjata) or char:FindFirstChild(namaSenjata)
+    if humanoid and alat and alat.Parent == player.Backpack then humanoid:EquipTool(alat) end
+    return alat
+end
+
+local function SetupAnimationHook(char)
+    local hum = char:WaitForChild("Humanoid", 5)
+    if hum then
+        local animator = hum:WaitForChild("Animator", 5)
+        if animator then animator.AnimationPlayed:Connect(function(track) if Config.FastAttackAktif then track:AdjustSpeed(Config.FastAttackSpeed) end end) end
+    end
+end
+if player.Character then SetupAnimationHook(player.Character) end
+player.CharacterAdded:Connect(SetupAnimationHook)
+
+local function ClickScreen()
+    task.spawn(function()
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+        task.wait(0.01)
+        VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+    end)
+end
+
+local lastClick = 0
+getgenv().AALoop = RunService.Heartbeat:Connect(function()
+    if getgenv().AutoAttackAktif then
+        local char = player.Character
+        local hrp = char and char:FindFirstChild("HumanoidRootPart")
+        
+        if hrp then
+            local jarakTerdekat = math.huge
+            local targetTerbaik = nil
+
+            -- Mengumpulkan semua target dari kedua folder (Serangga Biasa & BosDunia)
+            local semuaMusuh = {}
+            if folderSerangga then 
+                for _, v in ipairs(folderSerangga:GetChildren()) do table.insert(semuaMusuh, v) end 
+            end
+            if folderBos then 
+                for _, v in ipairs(folderBos:GetChildren()) do table.insert(semuaMusuh, v) end 
+            end
+
+            for _, musuh in ipairs(semuaMusuh) do
+                if Config.TargetPilihan == "Semua Target" or musuh.Name == Config.TargetPilihan then
+                    local rootPart = musuh:FindFirstChild("Root")
+                    if rootPart then
+                        local jarak = (hrp.Position - rootPart.Position).Magnitude
+                        if jarak < jarakTerdekat then jarakTerdekat = jarak; targetTerbaik = musuh end
+                    end
+                end
+            end
+
+            if targetTerbaik then
+                local targetRoot = targetTerbaik:FindFirstChild("Root")
+                if targetRoot then
+                    hrp.CFrame = targetRoot.CFrame * CFrame.new(0, Config.JarakTinggi, Config.JarakBelakang)
+                    local senjata = equipSenjata()
+                    if senjata then
+                        local baseDelay = 0.6
+                        local clickInterval = Config.FastAttackAktif and (baseDelay / Config.FastAttackSpeed) or baseDelay
+                        if tick() - lastClick >= clickInterval then
+                            lastClick = tick()
+                            ClickScreen()
+                            pcall(function() senjata:Activate() end)
+                        end
+                    end
+                end
+            end
+        end
+    end
+end)
+
+-- ==========================================
+-- 🖱️ ENGINE AUTO CLICKER TERPISAH
+-- ==========================================
+getgenv().ACLoop = task.spawn(function()
+    while true do
+        local delayInSeconds = Config.AutoClickDelay / 1000
+        if delayInSeconds <= 0 then delayInSeconds = 0.001 end 
+        
+        if getgenv().AutoClickAktif then
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
+            task.wait(0.005)
+            VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
+        end
+        task.wait(delayInSeconds) 
+    end
+end)
