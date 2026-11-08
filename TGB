@@ -1,5 +1,5 @@
 -- ==========================================
--- 🚀 BLUBUB HUB V7 - THE ULTIMATE BOSS EDITION
+-- 🚀 BLUBUB HUB V8 - AUTO CLICK FIXED EDITION
 -- ==========================================
 
 local CoreGui = game:GetService("CoreGui")
@@ -15,12 +15,12 @@ local VirtualUser = game:GetService("VirtualUser")
 
 local player = Players.LocalPlayer
 local folderSerangga = Workspace:WaitForChild("SeranggaLiar", 10)
-local folderBos = Workspace:WaitForChild("BosDunia", 10) -- Folder boss baru ditambahkan
+local folderBos = Workspace:WaitForChild("BosDunia", 10) 
 local namaSenjata = "Staf Lv11" 
 
 -- [ MEMBERSIHKAN INSTANCE LAMA ]
-if getgenv().BlububHubV6 then getgenv().BlububHubV6:Destroy() end
 if getgenv().BlububHubV7 then getgenv().BlububHubV7:Destroy() end
+if getgenv().BlububHubV8 then getgenv().BlububHubV8:Destroy() end
 if getgenv().AALoop then getgenv().AALoop:Disconnect() end
 if getgenv().FALoop then getgenv().FALoop:Disconnect() end
 if getgenv().ACLoop then task.cancel(getgenv().ACLoop) end
@@ -40,13 +40,10 @@ local function LoadConfig()
         FastAttackSpeed = 5,
         AutoClickDelay = 10
     }
-    
     if isfile and isfile(ConfigFile) then
         local success, result = pcall(function() return HttpService:JSONDecode(readfile(ConfigFile)) end)
         if success and type(result) == "table" then
-            for k, v in pairs(default) do
-                if result[k] == nil then result[k] = v end
-            end
+            for k, v in pairs(default) do if result[k] == nil then result[k] = v end end
             return result
         end
     end
@@ -74,19 +71,16 @@ end)
 -- 🎨 PEMBUATAN UI SUPER MODERN
 -- ==========================================
 local ScreenGui = Instance.new("ScreenGui")
-ScreenGui.Name = "BlububHubV7"
+ScreenGui.Name = "BlububHubV8"
 ScreenGui.ResetOnSpawn = false
 ScreenGui.Parent = (pcall(function() return CoreGui.Name end) and CoreGui) or player:WaitForChild("PlayerGui")
-getgenv().BlububHubV7 = ScreenGui
+getgenv().BlububHubV8 = ScreenGui
 
 -- ICON MINIMIZE
-local MinIcon = Instance.new("TextButton", ScreenGui)
-MinIcon.Size = UDim2.new(0, 45, 0, 45); MinIcon.Position = UDim2.new(0.05, 0, 0.1, 0); MinIcon.BackgroundColor3 = Color3.fromRGB(15, 15, 20); MinIcon.Text = "⚡"; MinIcon.TextSize = 20; MinIcon.Visible = false; MinIcon.Draggable = true; Instance.new("UICorner", MinIcon).CornerRadius = UDim.new(0, 10); Instance.new("UIStroke", MinIcon).Color = Color3.fromRGB(0, 200, 255); Instance.new("UIStroke", MinIcon).Thickness = 2
+local MinIcon = Instance.new("TextButton", ScreenGui); MinIcon.Size = UDim2.new(0, 45, 0, 45); MinIcon.Position = UDim2.new(0.05, 0, 0.1, 0); MinIcon.BackgroundColor3 = Color3.fromRGB(15, 15, 20); MinIcon.Text = "⚡"; MinIcon.TextSize = 20; MinIcon.Visible = false; MinIcon.Draggable = true; Instance.new("UICorner", MinIcon).CornerRadius = UDim.new(0, 10); Instance.new("UIStroke", MinIcon).Color = Color3.fromRGB(0, 200, 255); Instance.new("UIStroke", MinIcon).Thickness = 2
 
 -- MAIN FRAME
-local MainFrame = Instance.new("Frame", ScreenGui)
-MainFrame.Size = UDim2.new(0, 360, 0, 520) 
-MainFrame.Position = UDim2.new(0.5, -180, 0.2, 0); MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24); MainFrame.BorderSizePixel = 0; MainFrame.ClipsDescendants = true; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12); Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(0, 200, 255); Instance.new("UIStroke", MainFrame).Thickness = 2
+local MainFrame = Instance.new("Frame", ScreenGui); MainFrame.Size = UDim2.new(0, 360, 0, 520); MainFrame.Position = UDim2.new(0.5, -180, 0.2, 0); MainFrame.BackgroundColor3 = Color3.fromRGB(18, 18, 24); MainFrame.BorderSizePixel = 0; MainFrame.ClipsDescendants = true; Instance.new("UICorner", MainFrame).CornerRadius = UDim.new(0, 12); Instance.new("UIStroke", MainFrame).Color = Color3.fromRGB(0, 200, 255); Instance.new("UIStroke", MainFrame).Thickness = 2
 
 -- DRAG & RESIZE LOGIC
 local dragInput, dragStart, startPos
@@ -101,7 +95,7 @@ UserInputService.InputEnded:Connect(function(input) if input.UserInputType == En
 
 -- HEADER
 local Header = Instance.new("Frame", MainFrame); Header.Size = UDim2.new(1, 0, 0, 40); Header.BackgroundTransparency = 1
-local Title = Instance.new("TextLabel", Header); Title.Size = UDim2.new(0.8, 0, 1, 0); Title.Position = UDim2.new(0.05, 0, 0, 0); Title.BackgroundTransparency = 1; Title.Text = "BLUBUB HUB V7 (BOSS)"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 17; Title.TextXAlignment = Enum.TextXAlignment.Left
+local Title = Instance.new("TextLabel", Header); Title.Size = UDim2.new(0.8, 0, 1, 0); Title.Position = UDim2.new(0.05, 0, 0, 0); Title.BackgroundTransparency = 1; Title.Text = "BLUBUB HUB V8 (FIX)"; Title.TextColor3 = Color3.new(1,1,1); Title.Font = Enum.Font.GothamBold; Title.TextSize = 17; Title.TextXAlignment = Enum.TextXAlignment.Left
 local CloseBtn = Instance.new("TextButton", Header); CloseBtn.Size = UDim2.new(0, 30, 0, 30); CloseBtn.Position = UDim2.new(1, -40, 0, 5); CloseBtn.BackgroundColor3 = Color3.fromRGB(255, 60, 60); CloseBtn.Text = "-"; CloseBtn.TextColor3 = Color3.new(1,1,1); CloseBtn.Font = Enum.Font.GothamBold; CloseBtn.TextSize = 20; Instance.new("UICorner", CloseBtn).CornerRadius = UDim.new(0, 6)
 
 CloseBtn.MouseButton1Click:Connect(function() MainFrame.Visible = false; MinIcon.Visible = true end)
@@ -135,17 +129,29 @@ end
 createAdjustment(CombatFrame, "Jauh / Dekat (Z)", 5, "JarakBelakang")
 createAdjustment(CombatFrame, "Atas / Bawah (Y)", 40, "JarakTinggi")
 
--- TOGGLE SPEED ATTACK
+-- [ PERBAIKAN: Menggunakan InputBegan agar tidak terblokir spam click virtual ]
 local FALabel = createAdjustment(CombatFrame, "Speed Attack", 80, "FastAttackSpeed"); FALabel.Size = UDim2.new(0.25, 0, 0, 30)
 local FAToggleBtn = Instance.new("TextButton", CombatFrame); FAToggleBtn.Size = UDim2.new(0, 60, 0, 30); FAToggleBtn.Position = UDim2.new(0.32, 0, 0, 80); FAToggleBtn.BackgroundColor3 = Config.FastAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); FAToggleBtn.Text = Config.FastAttackAktif and "ON" or "OFF"; FAToggleBtn.TextColor3 = Color3.new(1,1,1); FAToggleBtn.Font = Enum.Font.GothamBold; FAToggleBtn.TextSize = 12; Instance.new("UICorner", FAToggleBtn).CornerRadius = UDim.new(0, 6)
-FAToggleBtn.MouseButton1Click:Connect(function() Config.FastAttackAktif = not Config.FastAttackAktif; FAToggleBtn.BackgroundColor3 = Config.FastAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); FAToggleBtn.Text = Config.FastAttackAktif and "ON" or "OFF"; SaveConfig() end)
+FAToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        Config.FastAttackAktif = not Config.FastAttackAktif
+        FAToggleBtn.BackgroundColor3 = Config.FastAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60)
+        FAToggleBtn.Text = Config.FastAttackAktif and "ON" or "OFF"
+        SaveConfig()
+    end
+end)
 
--- TOGGLE AUTO CLICKER
+-- [ PERBAIKAN: Menggunakan InputBegan untuk Auto Click ]
 local ACLabel = createAdjustment(CombatFrame, "Auto Click (ms)", 120, "AutoClickDelay"); ACLabel.Size = UDim2.new(0.25, 0, 0, 30)
 local ACToggleBtn = Instance.new("TextButton", CombatFrame); ACToggleBtn.Size = UDim2.new(0, 60, 0, 30); ACToggleBtn.Position = UDim2.new(0.32, 0, 0, 120); ACToggleBtn.BackgroundColor3 = getgenv().AutoClickAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); ACToggleBtn.Text = getgenv().AutoClickAktif and "ON" or "OFF"; ACToggleBtn.TextColor3 = Color3.new(1,1,1); ACToggleBtn.Font = Enum.Font.GothamBold; ACToggleBtn.TextSize = 12; Instance.new("UICorner", ACToggleBtn).CornerRadius = UDim.new(0, 6)
-ACToggleBtn.MouseButton1Click:Connect(function() getgenv().AutoClickAktif = not getgenv().AutoClickAktif; ACToggleBtn.BackgroundColor3 = getgenv().AutoClickAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); ACToggleBtn.Text = getgenv().AutoClickAktif and "ON" or "OFF" end)
+ACToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        getgenv().AutoClickAktif = not getgenv().AutoClickAktif
+        ACToggleBtn.BackgroundColor3 = getgenv().AutoClickAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60)
+        ACToggleBtn.Text = getgenv().AutoClickAktif and "ON" or "OFF"
+    end
+end)
 
--- SEARCH BAR & TARGET LIST (MENDUKUNG BOSS)
 local SearchBox = Instance.new("TextBox", CombatFrame); SearchBox.Size = UDim2.new(0.9, 0, 0, 35); SearchBox.Position = UDim2.new(0.05, 0, 0, 165); SearchBox.BackgroundColor3 = Color3.fromRGB(30, 30, 40); SearchBox.PlaceholderText = "🔍 Cari monster / boss..."; SearchBox.Text = ""; SearchBox.TextColor3 = Color3.new(1,1,1); SearchBox.Font = Enum.Font.Gotham; SearchBox.TextSize = 13; Instance.new("UICorner", SearchBox).CornerRadius = UDim.new(0, 6)
 
 local TargetScroll = Instance.new("ScrollingFrame", CombatFrame); TargetScroll.Size = UDim2.new(0.9, 0, 1, -275); TargetScroll.Position = UDim2.new(0.05, 0, 0, 210); TargetScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 30); TargetScroll.BorderSizePixel = 0; TargetScroll.ScrollBarThickness = 5; TargetScroll.ScrollBarImageColor3 = Color3.fromRGB(0, 200, 255); Instance.new("UICorner", TargetScroll).CornerRadius = UDim.new(0, 8)
@@ -156,15 +162,8 @@ local function UpdateTargetList(filterText)
     for _, child in pairs(TargetScroll:GetChildren()) do if child:IsA("TextButton") then child:Destroy() end end
 
     local uniqueTargets = {["Semua Target"] = "Universal"}
-    
-    -- Memasukkan Serangga
-    if folderSerangga then 
-        for _, serangga in ipairs(folderSerangga:GetChildren()) do uniqueTargets[serangga.Name] = "Monster" end 
-    end
-    -- Memasukkan Boss (NagaSerangga dan lainnya di folder BosDunia)
-    if folderBos then 
-        for _, boss in ipairs(folderBos:GetChildren()) do uniqueTargets[boss.Name] = "Boss" end 
-    end
+    if folderSerangga then for _, serangga in ipairs(folderSerangga:GetChildren()) do uniqueTargets[serangga.Name] = "Monster" end end
+    if folderBos then for _, boss in ipairs(folderBos:GetChildren()) do uniqueTargets[boss.Name] = "Boss" end end
 
     local sortedTargets = {}
     for name, _ in pairs(uniqueTargets) do if filterText == "" or string.find(string.lower(name), filterText) then table.insert(sortedTargets, name) end end
@@ -179,26 +178,19 @@ local function UpdateTargetList(filterText)
         
         if isSelected then local stroke = Instance.new("UIStroke", btn); stroke.Color = Color3.fromRGB(0, 200, 255); stroke.Thickness = 1.5 end
         
-        -- Custom Tampilan UI Khusus Boss
         local textLabel = Instance.new("TextLabel", btn); textLabel.Size = UDim2.new(1, 0, 1, 0); textLabel.BackgroundTransparency = 1
         local iconPrefix = isBoss and "👹 " or ""
         local selectedPrefix = isSelected and "⚡ " or ""
-        
         textLabel.Text = selectedPrefix .. iconPrefix .. tName
         
-        -- Pewarnaan Text (Boss jadi merah terang agar beda)
-        if isBoss then
-            textLabel.TextColor3 = isSelected and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(255, 50, 50)
-        else
-            textLabel.TextColor3 = isSelected and Color3.fromRGB(0, 220, 255) or Color3.fromRGB(200, 200, 200)
-        end
+        if isBoss then textLabel.TextColor3 = isSelected and Color3.fromRGB(255, 100, 100) or Color3.fromRGB(255, 50, 50)
+        else textLabel.TextColor3 = isSelected and Color3.fromRGB(0, 220, 255) or Color3.fromRGB(200, 200, 200) end
         
         textLabel.Font = isSelected and Enum.Font.GothamBold or Enum.Font.GothamSemibold; textLabel.TextSize = 13; textLabel.TextXAlignment = Enum.TextXAlignment.Left
         local padding = Instance.new("UIPadding", textLabel); padding.PaddingLeft = UDim.new(0, 12)
         
         btn.MouseEnter:Connect(function() if not isSelected then TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(45, 45, 55)}):Play() end end)
         btn.MouseLeave:Connect(function() if not isSelected then TweenService:Create(btn, TweenInfo.new(0.2), {BackgroundColor3 = Color3.fromRGB(35, 35, 45)}):Play() end end)
-        
         btn.MouseButton1Click:Connect(function() Config.TargetPilihan = tName; SaveConfig(); UpdateTargetList(SearchBox.Text) end)
         ySize = ySize + 39
     end
@@ -206,20 +198,26 @@ local function UpdateTargetList(filterText)
 end
 
 SearchBox.Changed:Connect(function(prop) if prop == "Text" then UpdateTargetList(SearchBox.Text) end end)
--- Realtime Refresh untuk Serangga dan Boss
 if folderSerangga then folderSerangga.ChildAdded:Connect(function() UpdateTargetList(SearchBox.Text) end); folderSerangga.ChildRemoved:Connect(function() UpdateTargetList(SearchBox.Text) end) end
 if folderBos then folderBos.ChildAdded:Connect(function() UpdateTargetList(SearchBox.Text) end); folderBos.ChildRemoved:Connect(function() UpdateTargetList(SearchBox.Text) end) end
 UpdateTargetList("")
 
+-- [ PERBAIKAN: Menggunakan InputBegan untuk Main Attack Button ]
 local MainToggleBtn = Instance.new("TextButton", CombatFrame); MainToggleBtn.Size = UDim2.new(0.9, 0, 0, 45); MainToggleBtn.Position = UDim2.new(0.05, 0, 1, -55); MainToggleBtn.BackgroundColor3 = getgenv().AutoAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); MainToggleBtn.Text = getgenv().AutoAttackAktif and "STOP AUTO ATTACK" or "START AUTO ATTACK"; MainToggleBtn.TextColor3 = Color3.new(1,1,1); MainToggleBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", MainToggleBtn).CornerRadius = UDim.new(0, 8); Instance.new("UIStroke", MainToggleBtn).Thickness = 2
-MainToggleBtn.MouseButton1Click:Connect(function() getgenv().AutoAttackAktif = not getgenv().AutoAttackAktif; local targetColor = getgenv().AutoAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60); TweenService:Create(MainToggleBtn, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play(); MainToggleBtn.Text = getgenv().AutoAttackAktif and "STOP AUTO ATTACK" or "START AUTO ATTACK" end)
+MainToggleBtn.InputBegan:Connect(function(input)
+    if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+        getgenv().AutoAttackAktif = not getgenv().AutoAttackAktif
+        local targetColor = getgenv().AutoAttackAktif and Color3.fromRGB(50, 200, 50) or Color3.fromRGB(255, 60, 60)
+        TweenService:Create(MainToggleBtn, TweenInfo.new(0.3), {BackgroundColor3 = targetColor}):Play()
+        MainToggleBtn.Text = getgenv().AutoAttackAktif and "STOP AUTO ATTACK" or "START AUTO ATTACK"
+    end
+end)
 
 -- ==========================================
 -- 🌍 TAB SERVER HOPPER
 -- ==========================================
 local RefreshSrvBtn = Instance.new("TextButton", ServerFrame); RefreshSrvBtn.Size = UDim2.new(0.4, 0, 0, 35); RefreshSrvBtn.Position = UDim2.new(0.05, 0, 0, 10); RefreshSrvBtn.BackgroundColor3 = Color3.fromRGB(0, 150, 255); RefreshSrvBtn.Text = "Refresh"; RefreshSrvBtn.TextColor3 = Color3.new(1,1,1); RefreshSrvBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", RefreshSrvBtn).CornerRadius = UDim.new(0, 6)
 local ResetSrvBtn = Instance.new("TextButton", ServerFrame); ResetSrvBtn.Size = UDim2.new(0.4, 0, 0, 35); ResetSrvBtn.Position = UDim2.new(0.55, 0, 0, 10); ResetSrvBtn.BackgroundColor3 = Color3.fromRGB(255, 100, 50); ResetSrvBtn.Text = "Reset Tanda"; ResetSrvBtn.TextColor3 = Color3.new(1,1,1); ResetSrvBtn.Font = Enum.Font.GothamBold; Instance.new("UICorner", ResetSrvBtn).CornerRadius = UDim.new(0, 6)
-
 local SrvScroll = Instance.new("ScrollingFrame", ServerFrame); SrvScroll.Size = UDim2.new(0.9, 0, 1, -70); SrvScroll.Position = UDim2.new(0.05, 0, 0, 55); SrvScroll.BackgroundColor3 = Color3.fromRGB(22, 22, 30); SrvScroll.BorderSizePixel = 0; SrvScroll.ScrollBarThickness = 5; Instance.new("UICorner", SrvScroll).CornerRadius = UDim.new(0, 8)
 local SrvLayout = Instance.new("UIListLayout", SrvScroll); SrvLayout.SortOrder = Enum.SortOrder.LayoutOrder; SrvLayout.Padding = UDim.new(0, 5)
 
@@ -285,14 +283,9 @@ getgenv().AALoop = RunService.Heartbeat:Connect(function()
             local jarakTerdekat = math.huge
             local targetTerbaik = nil
 
-            -- Mengumpulkan semua target dari kedua folder (Serangga Biasa & BosDunia)
             local semuaMusuh = {}
-            if folderSerangga then 
-                for _, v in ipairs(folderSerangga:GetChildren()) do table.insert(semuaMusuh, v) end 
-            end
-            if folderBos then 
-                for _, v in ipairs(folderBos:GetChildren()) do table.insert(semuaMusuh, v) end 
-            end
+            if folderSerangga then for _, v in ipairs(folderSerangga:GetChildren()) do table.insert(semuaMusuh, v) end end
+            if folderBos then for _, v in ipairs(folderBos:GetChildren()) do table.insert(semuaMusuh, v) end end
 
             for _, musuh in ipairs(semuaMusuh) do
                 if Config.TargetPilihan == "Semua Target" or musuh.Name == Config.TargetPilihan then
@@ -325,7 +318,7 @@ getgenv().AALoop = RunService.Heartbeat:Connect(function()
 end)
 
 -- ==========================================
--- 🖱️ ENGINE AUTO CLICKER TERPISAH
+-- 🖱️ ENGINE AUTO CLICKER TERPISAH (FIXED)
 -- ==========================================
 getgenv().ACLoop = task.spawn(function()
     while true do
@@ -333,8 +326,9 @@ getgenv().ACLoop = task.spawn(function()
         if delayInSeconds <= 0 then delayInSeconds = 0.001 end 
         
         if getgenv().AutoClickAktif then
+            -- PERBAIKAN: Jeda frame direvisi menggunakan RenderStepped agar aman bagi engine UI
             VirtualInputManager:SendMouseButtonEvent(0, 0, 0, true, game, 0)
-            task.wait(0.005)
+            RunService.RenderStepped:Wait() 
             VirtualInputManager:SendMouseButtonEvent(0, 0, 0, false, game, 0)
         end
         task.wait(delayInSeconds) 
