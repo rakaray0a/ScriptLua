@@ -1,6 +1,3 @@
--- ==========================================
--- 🚀 BLUBUB HUB V8 - AUTO CLICK FIXED EDITION
--- ==========================================
 
 local CoreGui = game:GetService("CoreGui")
 local Players = game:GetService("Players")
