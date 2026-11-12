@@ -4,28 +4,24 @@ local CoreGui = game:GetService("CoreGui")
 local UserInputService = game:GetService("UserInputService")
 local HttpService = game:GetService("HttpService")
 local TeleportService = game:GetService("TeleportService")
-local SoundService = game:GetService("SoundService")
 local RunService = game:GetService("RunService")
+local VirtualUser = game:GetService("VirtualUser")
 
 local localPlayer = Players.LocalPlayer
 
 -----------------------------------
--- 1. SETUP EXECUTOR, RE-EXECUTE & FILE SAVING
+-- 1. SETUP & ANTI-MENUMPUK
 -----------------------------------
 local targetGuiParent = (gethui and gethui()) or CoreGui:FindFirstChild("RobloxGui") or CoreGui
 if not pcall(function() local _ = targetGuiParent.Name end) then
     targetGuiParent = localPlayer:WaitForChild("PlayerGui")
 end
 
-local UI_NAME = "EggESP_DeltaPC_UI_V5"
-
--- LOGIKA ANTI-MENUMPUK (Mendeteksi semua versi sebelumnya)
 for _, child in pairs(targetGuiParent:GetChildren()) do
-    -- Jika menemukan UI yang namanya mengandung "EggESP_DeltaPC_UI", langsung hapus
-    if string.find(child.Name, "EggESP_DeltaPC_UI") then
-        child:Destroy()
-    end
+    if string.find(child.Name, "EggESP_DeltaPC_UI") then child:Destroy() end
 end
+
+local UI_NAME = "EggESP_DeltaPC_UI_V9"
 
 local EGG_SAVE_FILE = "CustomEggs_Save.json"
 local SERVER_SAVE_FILE = "VisitedServers_" .. tostring(game.PlaceId) .. ".json"
@@ -56,7 +52,7 @@ end
 loadData(SERVER_SAVE_FILE, visitedServers)
 
 -----------------------------------
--- 2. PEMBUATAN UI UTAMA & NOTIFIKASI
+-- 2. PEMBUATAN UI UTAMA & RADAR MODERN
 -----------------------------------
 local screenGui = Instance.new("ScreenGui")
 screenGui.Name = UI_NAME
@@ -67,20 +63,20 @@ local espFolder = Instance.new("Folder")
 espFolder.Name = "ESP_Container"
 espFolder.Parent = screenGui
 
--- UI NOTIFIKASI (TENGAH LAYAR)
+-- NOTIFIKASI
 local notifLabel = Instance.new("TextLabel")
-notifLabel.Size = UDim2.new(0, 400, 0, 50)
-notifLabel.Position = UDim2.new(0.5, -200, 0.2, 0) -- Tengah atas
+notifLabel.Size = UDim2.new(0, 500, 0, 50)
+notifLabel.Position = UDim2.new(0.5, -250, 0.2, 0)
 notifLabel.BackgroundTransparency = 1
 notifLabel.Text = ""
 notifLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
 notifLabel.Font = Enum.Font.GothamBlack
 notifLabel.TextSize = 24
-notifLabel.TextStrokeTransparency = 0 -- Outline tebal
+notifLabel.TextStrokeTransparency = 0
 notifLabel.Visible = false
 notifLabel.Parent = screenGui
 
--- A. ICON KOTAK KECIL (MINIMIZED)
+-- ICON MINIMIZE
 local openIconBtn = Instance.new("TextButton")
 openIconBtn.Size = UDim2.new(0, 45, 0, 45)
 openIconBtn.Position = UDim2.new(0.5, -100, 0.2, 0)
@@ -92,10 +88,54 @@ openIconBtn.Parent = screenGui
 Instance.new("UICorner", openIconBtn).CornerRadius = UDim.new(0, 8)
 Instance.new("UIStroke", openIconBtn).Color = Color3.fromRGB(46, 204, 113)
 
--- B. MENU UTAMA
+-- === UI RADAR MODERN 2D (ON-SCREEN HUD) ===
+local radarHUD = Instance.new("Frame")
+radarHUD.Name = "RadarHUD"
+radarHUD.Size = UDim2.new(0, 200, 0, 200)
+radarHUD.Position = UDim2.new(1, -220, 0.5, -100) 
+radarHUD.BackgroundColor3 = Color3.fromRGB(15, 15, 20)
+radarHUD.BackgroundTransparency = 0.3
+radarHUD.BorderSizePixel = 0
+radarHUD.Visible = false 
+radarHUD.Parent = screenGui
+Instance.new("UICorner", radarHUD).CornerRadius = UDim.new(1, 0) 
+local radarStroke = Instance.new("UIStroke", radarHUD)
+radarStroke.Color = Color3.fromRGB(85, 255, 255) 
+radarStroke.Thickness = 2.5
+
+local vLine = Instance.new("Frame", radarHUD)
+vLine.Size = UDim2.new(0, 1, 1, 0); vLine.Position = UDim2.new(0.5, 0, 0, 0)
+vLine.BackgroundColor3 = Color3.fromRGB(85, 255, 255); vLine.BackgroundTransparency = 0.7; vLine.BorderSizePixel = 0
+local hLine = Instance.new("Frame", radarHUD)
+hLine.Size = UDim2.new(1, 0, 0, 1); hLine.Position = UDim2.new(0, 0, 0.5, 0)
+hLine.BackgroundColor3 = Color3.fromRGB(85, 255, 255); hLine.BackgroundTransparency = 0.7; hLine.BorderSizePixel = 0
+
+local centerDot = Instance.new("Frame", radarHUD)
+centerDot.Size = UDim2.new(0, 6, 0, 6); centerDot.Position = UDim2.new(0.5, -3, 0.5, -3)
+centerDot.BackgroundColor3 = Color3.fromRGB(255, 255, 255); centerDot.BorderSizePixel = 0
+Instance.new("UICorner", centerDot).CornerRadius = UDim.new(1, 0)
+
+local function createCompassLabel(text, pos)
+    local lbl = Instance.new("TextLabel", radarHUD)
+    lbl.Size = UDim2.new(0, 20, 0, 20); lbl.Position = pos
+    lbl.AnchorPoint = Vector2.new(0.5, 0.5)
+    lbl.BackgroundTransparency = 1; lbl.Text = text
+    lbl.TextColor3 = Color3.fromRGB(150, 200, 255); lbl.Font = Enum.Font.GothamBold; lbl.TextSize = 10
+end
+createCompassLabel("N", UDim2.new(0.5, 0, 0, 10))
+createCompassLabel("S", UDim2.new(0.5, 0, 1, -10))
+createCompassLabel("E", UDim2.new(1, -10, 0.5, 0))
+createCompassLabel("W", UDim2.new(0, 10, 0.5, 0))
+
+local radarResizeHandle = Instance.new("TextButton", radarHUD)
+radarResizeHandle.Size = UDim2.new(0, 20, 0, 20); radarResizeHandle.Position = UDim2.new(0.85, 0, 0.85, 0)
+radarResizeHandle.BackgroundTransparency = 1; radarResizeHandle.Text = "↘"
+radarResizeHandle.TextColor3 = Color3.fromRGB(255, 255, 255); radarResizeHandle.TextSize = 14
+
+-- MAIN MENU UI
 local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 260, 0, 250)
-mainFrame.Position = UDim2.new(0.5, -130, 0.2, 0)
+mainFrame.Size = UDim2.new(0, 280, 0, 300)
+mainFrame.Position = UDim2.new(0.5, -140, 0.2, 0)
 mainFrame.BackgroundColor3 = Color3.fromRGB(30, 30, 30)
 mainFrame.BorderSizePixel = 0
 mainFrame.ClipsDescendants = true
@@ -104,185 +144,105 @@ Instance.new("UICorner", mainFrame).CornerRadius = UDim.new(0, 6)
 Instance.new("UIStroke", mainFrame).Color = Color3.fromRGB(70, 70, 70)
 
 local headerFrame = Instance.new("Frame")
-headerFrame.Size = UDim2.new(1, 0, 0, 30)
-headerFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-headerFrame.BorderSizePixel = 0
-headerFrame.Parent = mainFrame
+headerFrame.Size = UDim2.new(1, 0, 0, 30); headerFrame.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
+headerFrame.BorderSizePixel = 0; headerFrame.Parent = mainFrame
 Instance.new("UICorner", headerFrame).CornerRadius = UDim.new(0, 6)
-local headerSquareFix = Instance.new("Frame")
-headerSquareFix.Size = UDim2.new(1, 0, 0, 5)
-headerSquareFix.Position = UDim2.new(0, 0, 1, -5)
-headerSquareFix.BackgroundColor3 = Color3.fromRGB(45, 45, 45)
-headerSquareFix.BorderSizePixel = 0
-headerSquareFix.Parent = headerFrame
+local headerFix = Instance.new("Frame")
+headerFix.Size = UDim2.new(1, 0, 0, 5); headerFix.Position = UDim2.new(0, 0, 1, -5)
+headerFix.BackgroundColor3 = Color3.fromRGB(45, 45, 45); headerFix.BorderSizePixel = 0; headerFix.Parent = headerFrame
 
 local titleText = Instance.new("TextLabel")
-titleText.Size = UDim2.new(1, -40, 1, 0)
-titleText.Position = UDim2.new(0, 10, 0, 0)
-titleText.BackgroundTransparency = 1
-titleText.Text = "Multi-Tool Tracker V5"
-titleText.TextColor3 = Color3.fromRGB(255, 255, 255)
-titleText.Font = Enum.Font.GothamBold
-titleText.TextSize = 14
-titleText.TextXAlignment = Enum.TextXAlignment.Left
-titleText.Parent = headerFrame
+titleText.Size = UDim2.new(1, -40, 1, 0); titleText.Position = UDim2.new(0, 10, 0, 0)
+titleText.BackgroundTransparency = 1; titleText.Text = "Multi-Tool Tracker V9"
+titleText.TextColor3 = Color3.fromRGB(255, 255, 255); titleText.Font = Enum.Font.GothamBold; titleText.TextSize = 14; titleText.TextXAlignment = Enum.TextXAlignment.Left; titleText.Parent = headerFrame
 
 local minimizeBtn = Instance.new("TextButton")
-minimizeBtn.Size = UDim2.new(0, 20, 0, 20)
-minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
-minimizeBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-minimizeBtn.Text = "-"
-minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-minimizeBtn.Font = Enum.Font.GothamBold
-minimizeBtn.Parent = headerFrame
+minimizeBtn.Size = UDim2.new(0, 20, 0, 20); minimizeBtn.Position = UDim2.new(1, -25, 0, 5)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60); minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255); minimizeBtn.Font = Enum.Font.GothamBold; minimizeBtn.Parent = headerFrame
 Instance.new("UICorner", minimizeBtn).CornerRadius = UDim.new(0, 4)
 
 local tabBtnContainer = Instance.new("Frame")
-tabBtnContainer.Size = UDim2.new(1, 0, 0, 25)
-tabBtnContainer.Position = UDim2.new(0, 0, 0, 30)
-tabBtnContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-tabBtnContainer.BorderSizePixel = 0
-tabBtnContainer.Parent = mainFrame
+tabBtnContainer.Size = UDim2.new(1, 0, 0, 25); tabBtnContainer.Position = UDim2.new(0, 0, 0, 30)
+tabBtnContainer.BackgroundColor3 = Color3.fromRGB(40, 40, 40); tabBtnContainer.BorderSizePixel = 0; tabBtnContainer.Parent = mainFrame
 local tabListLayout = Instance.new("UIListLayout", tabBtnContainer)
-tabListLayout.FillDirection = Enum.FillDirection.Horizontal
-tabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
+tabListLayout.FillDirection = Enum.FillDirection.Horizontal; tabListLayout.SortOrder = Enum.SortOrder.LayoutOrder
 
 local btnTabESP = Instance.new("TextButton")
-btnTabESP.Size = UDim2.new(0.5, 0, 1, 0)
-btnTabESP.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
-btnTabESP.Text = "ESP/Radar"
-btnTabESP.TextColor3 = Color3.fromRGB(255, 255, 255)
-btnTabESP.Font = Enum.Font.GothamBold
-btnTabESP.Parent = tabBtnContainer
+btnTabESP.Size = UDim2.new(0.5, 0, 1, 0); btnTabESP.BackgroundColor3 = Color3.fromRGB(60, 60, 60)
+btnTabESP.Text = "Features"; btnTabESP.TextColor3 = Color3.fromRGB(255, 255, 255); btnTabESP.Font = Enum.Font.GothamBold; btnTabESP.Parent = tabBtnContainer
 
 local btnTabServer = Instance.new("TextButton")
-btnTabServer.Size = UDim2.new(0.5, 0, 1, 0)
-btnTabServer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-btnTabServer.Text = "Servers"
-btnTabServer.TextColor3 = Color3.fromRGB(200, 200, 200)
-btnTabServer.Font = Enum.Font.GothamBold
-btnTabServer.Parent = tabBtnContainer
+btnTabServer.Size = UDim2.new(0.5, 0, 1, 0); btnTabServer.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
+btnTabServer.Text = "Servers"; btnTabServer.TextColor3 = Color3.fromRGB(200, 200, 200); btnTabServer.Font = Enum.Font.GothamBold; btnTabServer.Parent = tabBtnContainer
 
 local tabPagesContainer = Instance.new("Frame")
-tabPagesContainer.Size = UDim2.new(1, 0, 1, -55)
-tabPagesContainer.Position = UDim2.new(0, 0, 0, 55)
-tabPagesContainer.BackgroundTransparency = 1
-tabPagesContainer.Parent = mainFrame
+tabPagesContainer.Size = UDim2.new(1, 0, 1, -55); tabPagesContainer.Position = UDim2.new(0, 0, 0, 55)
+tabPagesContainer.BackgroundTransparency = 1; tabPagesContainer.Parent = mainFrame
 
--- === PAGE 1: ESP & RADAR ===
+-- === PAGE 1: ESP, RADAR, AIM, AFK ===
 local pageESP = Instance.new("Frame")
-pageESP.Size = UDim2.new(1, 0, 1, 0)
-pageESP.BackgroundTransparency = 1
-pageESP.Visible = true
-pageESP.Parent = tabPagesContainer
+pageESP.Size = UDim2.new(1, 0, 1, 0); pageESP.BackgroundTransparency = 1; pageESP.Visible = true; pageESP.Parent = tabPagesContainer
 
 local toggleBtn = Instance.new("TextButton")
-toggleBtn.Size = UDim2.new(0.5, -15, 0, 30)
-toggleBtn.Position = UDim2.new(0, 10, 0, 10)
-toggleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
-toggleBtn.Text = "ESP: ON"
-toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-toggleBtn.Font = Enum.Font.GothamBold
-toggleBtn.TextSize = 12
-toggleBtn.Parent = pageESP
+toggleBtn.Size = UDim2.new(0.5, -15, 0, 30); toggleBtn.Position = UDim2.new(0, 10, 0, 5); toggleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+toggleBtn.Text = "ESP: ON"; toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255); toggleBtn.Font = Enum.Font.GothamBold; toggleBtn.TextSize = 12; toggleBtn.Parent = pageESP
 Instance.new("UICorner", toggleBtn).CornerRadius = UDim.new(0, 6)
 
 local radarToggleBtn = Instance.new("TextButton")
-radarToggleBtn.Size = UDim2.new(0.5, -15, 0, 30)
-radarToggleBtn.Position = UDim2.new(0.5, 5, 0, 10)
-radarToggleBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-radarToggleBtn.Text = "Radar: OFF"
-radarToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-radarToggleBtn.Font = Enum.Font.GothamBold
-radarToggleBtn.TextSize = 12
-radarToggleBtn.Parent = pageESP
+radarToggleBtn.Size = UDim2.new(0.5, -15, 0, 30); radarToggleBtn.Position = UDim2.new(0.5, 5, 0, 5); radarToggleBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+radarToggleBtn.Text = "Radar: OFF"; radarToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255); radarToggleBtn.Font = Enum.Font.GothamBold; radarToggleBtn.TextSize = 12; radarToggleBtn.Parent = pageESP
 Instance.new("UICorner", radarToggleBtn).CornerRadius = UDim.new(0, 6)
 
+local aimToggleBtn = Instance.new("TextButton")
+aimToggleBtn.Size = UDim2.new(0.5, -15, 0, 30); aimToggleBtn.Position = UDim2.new(0, 10, 0, 40); aimToggleBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+aimToggleBtn.Text = "Auto Aim: OFF"; aimToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255); aimToggleBtn.Font = Enum.Font.GothamBold; aimToggleBtn.TextSize = 12; aimToggleBtn.Parent = pageESP
+Instance.new("UICorner", aimToggleBtn).CornerRadius = UDim.new(0, 6)
+
+local afkToggleBtn = Instance.new("TextButton")
+afkToggleBtn.Size = UDim2.new(0.5, -15, 0, 30); afkToggleBtn.Position = UDim2.new(0.5, 5, 0, 40); afkToggleBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+afkToggleBtn.Text = "Anti-AFK: OFF"; afkToggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255); afkToggleBtn.Font = Enum.Font.GothamBold; afkToggleBtn.TextSize = 12; afkToggleBtn.Parent = pageESP
+Instance.new("UICorner", afkToggleBtn).CornerRadius = UDim.new(0, 6)
+
 local addEggInput = Instance.new("TextBox")
-addEggInput.Size = UDim2.new(0.65, -15, 0, 30)
-addEggInput.Position = UDim2.new(0, 10, 0, 45)
-addEggInput.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
-addEggInput.TextColor3 = Color3.fromRGB(255, 255, 255)
-addEggInput.PlaceholderText = "Input New Egg..."
-addEggInput.Font = Enum.Font.Gotham
-addEggInput.TextSize = 12
-addEggInput.Parent = pageESP
+addEggInput.Size = UDim2.new(0.65, -15, 0, 30); addEggInput.Position = UDim2.new(0, 10, 0, 75); addEggInput.BackgroundColor3 = Color3.fromRGB(20, 20, 20)
+addEggInput.TextColor3 = Color3.fromRGB(255, 255, 255); addEggInput.PlaceholderText = "Input New Egg..."; addEggInput.Font = Enum.Font.Gotham; addEggInput.TextSize = 12; addEggInput.Parent = pageESP
 Instance.new("UICorner", addEggInput).CornerRadius = UDim.new(0, 4)
 
 local addEggBtn = Instance.new("TextButton")
-addEggBtn.Size = UDim2.new(0.35, -5, 0, 30)
-addEggBtn.Position = UDim2.new(0.65, 0, 0, 45)
-addEggBtn.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
-addEggBtn.Text = "Add Egg"
-addEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-addEggBtn.Font = Enum.Font.GothamBold
-addEggBtn.TextSize = 12
-addEggBtn.Parent = pageESP
+addEggBtn.Size = UDim2.new(0.35, -5, 0, 30); addEggBtn.Position = UDim2.new(0.65, 0, 0, 75); addEggBtn.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+addEggBtn.Text = "Add Egg"; addEggBtn.TextColor3 = Color3.fromRGB(255, 255, 255); addEggBtn.Font = Enum.Font.GothamBold; addEggBtn.TextSize = 12; addEggBtn.Parent = pageESP
 Instance.new("UICorner", addEggBtn).CornerRadius = UDim.new(0, 4)
 
 local eggListScroll = Instance.new("ScrollingFrame")
-eggListScroll.Size = UDim2.new(1, -20, 1, -85)
-eggListScroll.Position = UDim2.new(0, 10, 0, 80)
-eggListScroll.BackgroundTransparency = 1
-eggListScroll.ScrollBarThickness = 4
-eggListScroll.Parent = pageESP
-local eggListLayout = Instance.new("UIListLayout", eggListScroll)
-eggListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-eggListLayout.Padding = UDim.new(0, 5)
+eggListScroll.Size = UDim2.new(1, -20, 1, -115); eggListScroll.Position = UDim2.new(0, 10, 0, 110); eggListScroll.BackgroundTransparency = 1; eggListScroll.ScrollBarThickness = 4; eggListScroll.Parent = pageESP
+local eggListLayout = Instance.new("UIListLayout", eggListScroll); eggListLayout.SortOrder = Enum.SortOrder.LayoutOrder; eggListLayout.Padding = UDim.new(0, 5)
 
 -- === PAGE 2: SERVERS ===
 local pageServer = Instance.new("Frame")
-pageServer.Size = UDim2.new(1, 0, 1, 0)
-pageServer.BackgroundTransparency = 1
-pageServer.Visible = false
-pageServer.Parent = tabPagesContainer
+pageServer.Size = UDim2.new(1, 0, 1, 0); pageServer.BackgroundTransparency = 1; pageServer.Visible = false; pageServer.Parent = tabPagesContainer
 
-local srvActionFrame = Instance.new("Frame")
-srvActionFrame.Size = UDim2.new(1, 0, 0, 30)
-srvActionFrame.BackgroundTransparency = 1
-srvActionFrame.Parent = pageServer
+local srvActionFrame = Instance.new("Frame"); srvActionFrame.Size = UDim2.new(1, 0, 0, 30); srvActionFrame.BackgroundTransparency = 1; srvActionFrame.Parent = pageServer
 
 local refreshSrvBtn = Instance.new("TextButton")
-refreshSrvBtn.Size = UDim2.new(0.5, -15, 0, 25)
-refreshSrvBtn.Position = UDim2.new(0, 10, 0, 5)
-refreshSrvBtn.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
-refreshSrvBtn.Text = "Refresh List"
-refreshSrvBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-refreshSrvBtn.Font = Enum.Font.GothamBold
-refreshSrvBtn.Parent = srvActionFrame
+refreshSrvBtn.Size = UDim2.new(0.5, -15, 0, 25); refreshSrvBtn.Position = UDim2.new(0, 10, 0, 5); refreshSrvBtn.BackgroundColor3 = Color3.fromRGB(52, 152, 219)
+refreshSrvBtn.Text = "Refresh List"; refreshSrvBtn.TextColor3 = Color3.fromRGB(255, 255, 255); refreshSrvBtn.Font = Enum.Font.GothamBold; refreshSrvBtn.Parent = srvActionFrame
 Instance.new("UICorner", refreshSrvBtn).CornerRadius = UDim.new(0, 4)
 
 local resetSrvBtn = Instance.new("TextButton")
-resetSrvBtn.Size = UDim2.new(0.5, -15, 0, 25)
-resetSrvBtn.Position = UDim2.new(0.5, 5, 0, 5)
-resetSrvBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-resetSrvBtn.Text = "Reset Visited"
-resetSrvBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-resetSrvBtn.Font = Enum.Font.GothamBold
-resetSrvBtn.Parent = srvActionFrame
+resetSrvBtn.Size = UDim2.new(0.5, -15, 0, 25); resetSrvBtn.Position = UDim2.new(0.5, 5, 0, 5); resetSrvBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+resetSrvBtn.Text = "Reset Visited"; resetSrvBtn.TextColor3 = Color3.fromRGB(255, 255, 255); resetSrvBtn.Font = Enum.Font.GothamBold; resetSrvBtn.Parent = srvActionFrame
 Instance.new("UICorner", resetSrvBtn).CornerRadius = UDim.new(0, 4)
 
 local serverScroll = Instance.new("ScrollingFrame")
-serverScroll.Size = UDim2.new(1, -20, 1, -40)
-serverScroll.Position = UDim2.new(0, 10, 0, 35)
-serverScroll.BackgroundTransparency = 1
-serverScroll.ScrollBarThickness = 4
-serverScroll.Parent = pageServer
-local srvListLayout = Instance.new("UIListLayout", serverScroll)
-srvListLayout.SortOrder = Enum.SortOrder.LayoutOrder
-srvListLayout.Padding = UDim.new(0, 5)
+serverScroll.Size = UDim2.new(1, -20, 1, -40); serverScroll.Position = UDim2.new(0, 10, 0, 35); serverScroll.BackgroundTransparency = 1; serverScroll.ScrollBarThickness = 4; serverScroll.Parent = pageServer
+local srvListLayout = Instance.new("UIListLayout", serverScroll); srvListLayout.SortOrder = Enum.SortOrder.LayoutOrder; srvListLayout.Padding = UDim.new(0, 5)
 
--- Resize Handle
 local resizeHandle = Instance.new("TextButton")
-resizeHandle.Size = UDim2.new(0, 15, 0, 15)
-resizeHandle.Position = UDim2.new(1, -15, 1, -15)
-resizeHandle.BackgroundTransparency = 1
-resizeHandle.Text = "↘"
-resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 150)
-resizeHandle.Parent = mainFrame
+resizeHandle.Size = UDim2.new(0, 15, 0, 15); resizeHandle.Position = UDim2.new(1, -15, 1, -15); resizeHandle.BackgroundTransparency = 1; resizeHandle.Text = "↘"; resizeHandle.TextColor3 = Color3.fromRGB(150, 150, 150); resizeHandle.Parent = mainFrame
 
 -----------------------------------
--- 3. INTERAKSI UI (TAB, DRAG, MINIMIZE, RESIZE)
+-- 3. INTERAKSI UI DRAG, RESIZE & TAB
 -----------------------------------
 btnTabESP.MouseButton1Click:Connect(function()
     pageESP.Visible = true; pageServer.Visible = false
@@ -316,6 +276,7 @@ local function makeDraggable(dragPart, targetPartToMove)
 end
 makeDraggable(headerFrame, mainFrame)
 makeDraggable(openIconBtn)
+makeDraggable(radarHUD) -- RADAR DRAGGABLE
 
 minimizeBtn.MouseButton1Click:Connect(function()
     openIconBtn.Position = UDim2.new(mainFrame.Position.X.Scale, mainFrame.Position.X.Offset, mainFrame.Position.Y.Scale, mainFrame.Position.Y.Offset)
@@ -345,102 +306,139 @@ local function makeResizable(handle, mainPart)
 end
 makeResizable(resizeHandle, mainFrame)
 
------------------------------------
--- 4. LIST EGG, ESP & NOTIF LOGIC
------------------------------------
-local espEnabled = true
-local radarEnabled = false
-local connections = {}
-local activeEggInstances = {} -- Database real-time telur yang sedang spawn
-local notifCounter = 0
-
--- UI Radar Setup (Diletakkan di atas kepala player)
-local radarBillboard = Instance.new("BillboardGui")
-radarBillboard.Name = "RadarCompass"
-radarBillboard.Size = UDim2.new(0, 150, 0, 150)
-radarBillboard.StudsOffset = Vector3.new(0, 3.5, 0) -- Jarak radar melayang di atas kepala
-radarBillboard.AlwaysOnTop = true
-radarBillboard.Enabled = false
-radarBillboard.Parent = espFolder
-
-local radarBg = Instance.new("Frame")
-radarBg.Size = UDim2.new(0, 120, 0, 120)
-radarBg.Position = UDim2.new(0.5, -60, 0.5, -60)
-radarBg.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
-radarBg.BackgroundTransparency = 0.5
-radarBg.BorderSizePixel = 0
-Instance.new("UICorner", radarBg).CornerRadius = UDim.new(1, 0)
-radarBg.Parent = radarBillboard
-
--- Fungsi Memunculkan Notifikasi
-local function showNotification(eggName)
-    notifCounter = notifCounter + 1
-    local currentCount = notifCounter
-    
-    notifLabel.Text = "🥚 " .. eggName .. " Spawned!"
-    notifLabel.Visible = true
-    
-    -- Efek Suara Ping (Dibuat di CoreGui agar selalu terdengar Client)
-    local snd = Instance.new("Sound")
-    snd.SoundId = "rbxassetid://4590657391" -- Sound ping universal
-    snd.Volume = 2
-    snd.Parent = CoreGui
-    snd:Play()
-    task.delay(snd.TimeLength + 1, function() snd:Destroy() end)
-    
-    -- Hilangkan teks setelah 3 detik
-    task.delay(3, function()
-        if notifCounter == currentCount then
-            notifLabel.Visible = false
+local function makeSquareResizable(handle, mainPart)
+    local dragging, dragStart, startSize
+    handle.InputBegan:Connect(function(input)
+        if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+            dragging = true; dragStart = input.Position; startSize = mainPart.Size
+            input.Changed:Connect(function() if input.UserInputState == Enum.UserInputState.End then dragging = false end end)
+        end
+    end)
+    UserInputService.InputChanged:Connect(function(input)
+        if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+            local delta = input.Position - dragStart
+            local newSize = math.max(120, startSize.X.Offset + delta.X)
+            mainPart.Size = UDim2.new(0, newSize, 0, newSize) 
         end
     end)
 end
+makeSquareResizable(radarResizeHandle, radarHUD)
 
--- Refresh GUI List
-local function refreshEggListUI()
-    for _, child in pairs(eggListScroll:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
+-----------------------------------
+-- 4. FITUR UTAMA (ESP, NOTIF, AIM, AFK)
+-----------------------------------
+local espEnabled = true
+local radarEnabled = false
+local aimMasterEnabled = false -- Sistem Bersiaga (Armed)
+local aimActivelyLocked = false -- Sedang Mengunci (Locked)
+local antiAfkEnabled = false
+local connections = {}
+local activeEggInstances = {}
+local notifCounter = 0
+local radarMarkers = {} 
+
+-- LOGIKA ANTI-AFK 
+localPlayer.Idled:Connect(function()
+    if antiAfkEnabled then
+        VirtualUser:CaptureController()
+        VirtualUser:ClickButton2(Vector2.new())
     end
+end)
+afkToggleBtn.MouseButton1Click:Connect(function()
+    antiAfkEnabled = not antiAfkEnabled
+    afkToggleBtn.Text = antiAfkEnabled and "Anti-AFK: ON" or "Anti-AFK: OFF"
+    afkToggleBtn.BackgroundColor3 = antiAfkEnabled and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(231, 76, 60)
+end)
+
+-- LOGIKA AUTO AIMBOT (TOGGLE RIGHT CLICK)
+aimToggleBtn.MouseButton1Click:Connect(function()
+    aimMasterEnabled = not aimMasterEnabled
+    if aimMasterEnabled then
+        -- Jika pemain Mobile/HP (Tidak ada mouse), langsung Locked otomatis
+        if UserInputService.TouchEnabled and not UserInputService.MouseEnabled then
+            aimActivelyLocked = true
+            aimToggleBtn.Text = "Aim: LOCKED"
+            aimToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+        else
+            -- Jika PC, bersiaga (Armed) tunggu klik kanan
+            aimActivelyLocked = false
+            aimToggleBtn.Text = "Aim Armed (RMB)"
+            aimToggleBtn.BackgroundColor3 = Color3.fromRGB(241, 196, 15) -- Warna Kuning
+        end
+    else
+        aimActivelyLocked = false
+        aimToggleBtn.Text = "Auto Aim: OFF"
+        aimToggleBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
+    end
+end)
+
+-- PC Toggle Klik Kanan (Hanya bekerja jika Aim Armed/Master Enabled)
+UserInputService.InputBegan:Connect(function(input, gpe)
+    if not gpe and input.UserInputType == Enum.UserInputType.MouseButton2 then
+        if aimMasterEnabled then
+            aimActivelyLocked = not aimActivelyLocked -- Toggle Lock
+            if aimActivelyLocked then
+                aimToggleBtn.Text = "Aim: LOCKED"
+                aimToggleBtn.BackgroundColor3 = Color3.fromRGB(46, 204, 113)
+            else
+                aimToggleBtn.Text = "Aim Armed (RMB)"
+                aimToggleBtn.BackgroundColor3 = Color3.fromRGB(241, 196, 15)
+            end
+        end
+    end
+end)
+
+-- FUNGSI NOTIFIKASI
+local function showNotification(eggName)
+    notifCounter = notifCounter + 1
+    local currentCount = notifCounter
+    local snd = Instance.new("Sound")
+    snd.Parent = CoreGui
+    local displayDuration = 3
+    notifLabel.Visible = true
+
+    if eggName == "Time Egg" then
+        snd.SoundId = "rbxassetid://2865228021"; snd.Volume = 3
+        notifLabel.Text = "🌟 URGENT: " .. eggName .. " SPAWNED! 🌟"; notifLabel.TextColor3 = Color3.fromRGB(85, 255, 255)
+        displayDuration = 5
+    elseif eggName == "Galaxy Egg" then
+        snd.SoundId = "rbxassetid://6140502127"; snd.Volume = 2
+        notifLabel.Text = "🥚 " .. eggName .. " Spawned!"; notifLabel.TextColor3 = Color3.fromRGB(170, 0, 255)
+    elseif eggName == "Phoenix Egg" then
+        snd.SoundId = "rbxassetid://4612382103"; snd.Volume = 2
+        notifLabel.Text = "🥚 " .. eggName .. " Spawned!"; notifLabel.TextColor3 = Color3.fromRGB(255, 85, 0)
+    else
+        snd.SoundId = "rbxassetid://4590657391"; snd.Volume = 2
+        notifLabel.Text = "🥚 " .. eggName .. " Spawned!"; notifLabel.TextColor3 = Color3.fromRGB(255, 255, 0)
+    end
+    
+    snd:Play()
+    task.delay(snd.TimeLength + 1, function() snd:Destroy() end)
+    task.delay(displayDuration, function() if notifCounter == currentCount then notifLabel.Visible = false end end)
+end
+
+-- FUNGSI REFRESH EGG LIST UI
+local function refreshEggListUI()
+    for _, child in pairs(eggListScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
     local count = 0
     for eggName, isSaved in pairs(targetEggs) do
         if isSaved then
             count = count + 1
             local item = Instance.new("Frame")
-            item.Size = UDim2.new(1, 0, 0, 30)
-            item.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-            item.BorderSizePixel = 0
-            item.Parent = eggListScroll
+            item.Size = UDim2.new(1, 0, 0, 30); item.BackgroundColor3 = Color3.fromRGB(40, 40, 40); item.BorderSizePixel = 0; item.Parent = eggListScroll
             Instance.new("UICorner", item).CornerRadius = UDim.new(0, 4)
-
             local nameLbl = Instance.new("TextLabel")
-            nameLbl.Size = UDim2.new(0.8, -5, 1, 0)
-            nameLbl.Position = UDim2.new(0, 5, 0, 0)
-            nameLbl.BackgroundTransparency = 1
-            nameLbl.Text = eggName
-            nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255)
-            nameLbl.Font = Enum.Font.Gotham
-            nameLbl.TextSize = 12
-            nameLbl.TextXAlignment = Enum.TextXAlignment.Left
-            nameLbl.Parent = item
-
+            nameLbl.Size = UDim2.new(0.8, -5, 1, 0); nameLbl.Position = UDim2.new(0, 5, 0, 0); nameLbl.BackgroundTransparency = 1; nameLbl.Text = eggName
+            nameLbl.TextColor3 = Color3.fromRGB(255, 255, 255); nameLbl.Font = Enum.Font.Gotham; nameLbl.TextSize = 12; nameLbl.TextXAlignment = Enum.TextXAlignment.Left; nameLbl.Parent = item
             local delBtn = Instance.new("TextButton")
-            delBtn.Size = UDim2.new(0.2, -5, 0, 24)
-            delBtn.Position = UDim2.new(0.8, 0, 0, 3)
-            delBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60)
-            delBtn.Text = "X"
-            delBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-            delBtn.Font = Enum.Font.GothamBold
-            delBtn.Parent = item
+            delBtn.Size = UDim2.new(0.2, -5, 0, 24); delBtn.Position = UDim2.new(0.8, 0, 0, 3); delBtn.BackgroundColor3 = Color3.fromRGB(231, 76, 60); delBtn.Text = "X"
+            delBtn.TextColor3 = Color3.fromRGB(255, 255, 255); delBtn.Font = Enum.Font.GothamBold; delBtn.Parent = item
             Instance.new("UICorner", delBtn).CornerRadius = UDim.new(0, 4)
 
             delBtn.MouseButton1Click:Connect(function()
-                targetEggs[eggName] = nil
-                saveData(EGG_SAVE_FILE, targetEggs)
-                refreshEggListUI()
+                targetEggs[eggName] = nil; saveData(EGG_SAVE_FILE, targetEggs); refreshEggListUI()
                 for _, esp in pairs(espFolder:GetChildren()) do
-                    if esp:IsA("BillboardGui") and string.find(esp.Name, eggName .. "_", 1, true) == 1 then
-                        esp:Destroy()
-                    end
+                    if esp:IsA("BillboardGui") and string.find(esp.Name, eggName .. "_", 1, true) == 1 then esp:Destroy() end
                 end
             end)
         end
@@ -449,6 +447,7 @@ local function refreshEggListUI()
 end
 refreshEggListUI()
 
+-- FUNGSI MEMBUAT ESP
 local function createESP(eggModel, isNewSpawn)
     if not targetEggs[eggModel.Name] then return end
     if espFolder:FindFirstChild(eggModel.Name .. "_" .. eggModel:GetDebugId()) then return end
@@ -456,31 +455,14 @@ local function createESP(eggModel, isNewSpawn)
     local adorneePart = (eggModel:IsA("Model") and (eggModel.PrimaryPart or eggModel:FindFirstChildWhichIsA("BasePart", true))) or (eggModel:IsA("BasePart") and eggModel)
     if not adorneePart then return end
 
-    -- Daftarkan ke Active list untuk sistem Radar
     activeEggInstances[eggModel] = true
-
-    -- Mainkan Notifikasi HANYA jika ini telur yang baru spawn (bukan bawaan map awal)
-    if isNewSpawn then
-        showNotification(eggModel.Name)
-    end
+    if isNewSpawn then showNotification(eggModel.Name) end
 
     local billboard = Instance.new("BillboardGui")
     billboard.Name = eggModel.Name .. "_" .. eggModel:GetDebugId()
-    billboard.Adornee = adorneePart
-    billboard.Size = UDim2.new(0, 100, 0, 30)
-    billboard.StudsOffset = Vector3.new(0, 2.5, 0)
-    billboard.AlwaysOnTop = true
-    billboard.Enabled = espEnabled
-    billboard.Parent = espFolder
-
+    billboard.Adornee = adorneePart; billboard.Size = UDim2.new(0, 100, 0, 30); billboard.StudsOffset = Vector3.new(0, 2.5, 0); billboard.AlwaysOnTop = true; billboard.Enabled = espEnabled; billboard.Parent = espFolder
     local textLabel = Instance.new("TextLabel")
-    textLabel.Size = UDim2.new(1, 0, 1, 0)
-    textLabel.BackgroundTransparency = 1
-    textLabel.Text = eggModel.Name
-    textLabel.Font = Enum.Font.GothamBold
-    textLabel.TextSize = 14
-    textLabel.TextStrokeTransparency = 0
-    textLabel.Parent = billboard
+    textLabel.Size = UDim2.new(1, 0, 1, 0); textLabel.BackgroundTransparency = 1; textLabel.Text = eggModel.Name; textLabel.Font = Enum.Font.GothamBold; textLabel.TextSize = 14; textLabel.TextStrokeTransparency = 0; textLabel.Parent = billboard
 
     if eggModel.Name == "Time Egg" then textLabel.TextColor3 = Color3.fromRGB(85, 255, 255)
     elseif eggModel.Name == "Galaxy Egg" then textLabel.TextColor3 = Color3.fromRGB(170, 0, 255)
@@ -488,10 +470,7 @@ local function createESP(eggModel, isNewSpawn)
     else textLabel.TextColor3 = Color3.fromRGB(255, 255, 0) end 
 
     local ancConnection = eggModel.AncestryChanged:Connect(function(_, parent)
-        if not parent then 
-            billboard:Destroy() 
-            activeEggInstances[eggModel] = nil -- Hapus dari sistem radar
-        end
+        if not parent then billboard:Destroy(); activeEggInstances[eggModel] = nil end
     end)
     table.insert(connections, ancConnection)
 end
@@ -499,11 +478,7 @@ end
 local function scanAllExisting()
     local gameplayRuntime = Workspace:FindFirstChild("GameplayRuntime")
     local activeEggsFolder = gameplayRuntime and gameplayRuntime:FindFirstChild("ActiveEggs")
-    if activeEggsFolder then
-        for _, obj in pairs(activeEggsFolder:GetDescendants()) do
-            createESP(obj, false) -- isNewSpawn = false (Jangan bunyikan notif saat load map)
-        end
-    end
+    if activeEggsFolder then for _, obj in pairs(activeEggsFolder:GetDescendants()) do createESP(obj, false) end end
 end
 
 task.spawn(function()
@@ -512,23 +487,18 @@ task.spawn(function()
     if activeEggsFolder then
         scanAllExisting()
         local descConnection = activeEggsFolder.DescendantAdded:Connect(function(newObj)
-            task.delay(0.1, function() createESP(newObj, true) end) -- isNewSpawn = true (Bunyikan notif!)
+            task.delay(0.1, function() createESP(newObj, true) end)
         end)
         table.insert(connections, descConnection)
     end
 end)
 
--- Tombol Interaksi ESP & Radar
 addEggBtn.MouseButton1Click:Connect(function()
     local newName = addEggInput.Text
     if newName and newName ~= "" then
-        targetEggs[newName] = true
-        saveData(EGG_SAVE_FILE, targetEggs) 
-        addEggInput.Text = ""
-        addEggInput.PlaceholderText = "Added: " .. newName
-        task.delay(2, function() addEggInput.PlaceholderText = "Input New Egg Name..." end)
-        refreshEggListUI() 
-        scanAllExisting() 
+        targetEggs[newName] = true; saveData(EGG_SAVE_FILE, targetEggs); addEggInput.Text = ""; addEggInput.PlaceholderText = "Added: " .. newName
+        task.delay(2, function() addEggInput.PlaceholderText = "Input New Egg..." end)
+        refreshEggListUI(); scanAllExisting() 
     end
 end)
 
@@ -537,7 +507,7 @@ toggleBtn.MouseButton1Click:Connect(function()
     toggleBtn.Text = espEnabled and "ESP: ON" or "ESP: OFF"
     toggleBtn.BackgroundColor3 = espEnabled and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(231, 76, 60)
     for _, esp in pairs(espFolder:GetChildren()) do
-        if esp:IsA("BillboardGui") and esp.Name ~= "RadarCompass" then esp.Enabled = espEnabled end
+        if esp:IsA("BillboardGui") then esp.Enabled = espEnabled end
     end
 end)
 
@@ -545,75 +515,71 @@ radarToggleBtn.MouseButton1Click:Connect(function()
     radarEnabled = not radarEnabled
     radarToggleBtn.Text = radarEnabled and "Radar: ON" or "Radar: OFF"
     radarToggleBtn.BackgroundColor3 = radarEnabled and Color3.fromRGB(46, 204, 113) or Color3.fromRGB(231, 76, 60)
-    radarBillboard.Enabled = radarEnabled
+    radarHUD.Visible = radarEnabled 
 end)
 
 -----------------------------------
--- 5. LOGIKA RENDER RADAR (3D TO 2D)
+-- 5. LOOP RENDER (RADAR 2D HUD & AIMBOT)
 -----------------------------------
 local renderConnection = RunService.RenderStepped:Connect(function()
-    if not radarEnabled then return end
-    
     local char = localPlayer.Character
-    if char and char:FindFirstChild("HumanoidRootPart") then
-        radarBillboard.Adornee = char.HumanoidRootPart
-    else
-        radarBillboard.Adornee = nil
-        return
-    end
-
+    local root = char and char:FindFirstChild("HumanoidRootPart")
     local cam = workspace.CurrentCamera
     
-    -- Sembunyikan semua panah lama
-    for _, child in pairs(radarBillboard:GetChildren()) do
-        if child:IsA("TextLabel") then child.Visible = false end
+    -- === RADAR 2D HUD LOGIC ===
+    if radarEnabled and root then
+        for _, marker in pairs(radarMarkers) do marker.Visible = false end
+
+        local i = 1
+        for egg, _ in pairs(activeEggInstances) do
+            if egg.Parent and targetEggs[egg.Name] then
+                local eggPos = (egg:IsA("Model") and egg.PrimaryPart and egg.PrimaryPart.Position) or (egg:IsA("BasePart") and egg.Position) or egg:GetModelCFrame().Position
+                local rel = cam.CFrame:PointToObjectSpace(eggPos)
+                local angle = math.atan2(rel.Z, rel.X)
+                local radius = (radarHUD.AbsoluteSize.X / 2) - 15 
+                local x = math.cos(angle) * radius
+                local y = math.sin(angle) * radius
+                
+                local arrow = radarHUD:FindFirstChild("Arrow_" .. i)
+                if not arrow then
+                    arrow = Instance.new("TextLabel")
+                    arrow.Name = "Arrow_" .. i; arrow.Size = UDim2.new(0, 20, 0, 20); arrow.AnchorPoint = Vector2.new(0.5, 0.5)
+                    arrow.BackgroundTransparency = 1; arrow.Text = "➤"; arrow.Font = Enum.Font.GothamBlack
+                    arrow.TextSize = 16; arrow.TextStrokeTransparency = 0; arrow.Parent = radarHUD
+                    table.insert(radarMarkers, arrow)
+                end
+                
+                if egg.Name == "Time Egg" then arrow.TextColor3 = Color3.fromRGB(85, 255, 255)
+                elseif egg.Name == "Galaxy Egg" then arrow.TextColor3 = Color3.fromRGB(170, 0, 255)
+                elseif egg.Name == "Phoenix Egg" then arrow.TextColor3 = Color3.fromRGB(255, 85, 0)
+                else arrow.TextColor3 = Color3.fromRGB(255, 255, 0) end
+                
+                arrow.Position = UDim2.new(0.5, x, 0.5, y); arrow.Rotation = math.deg(angle); arrow.Visible = true
+                i = i + 1
+            end
+        end
     end
 
-    local i = 1
-    for egg, _ in pairs(activeEggInstances) do
-        -- Pastikan telur belum dihancurkan (valid) dan nama telur masih ada di list
-        if egg.Parent and targetEggs[egg.Name] then
-            local eggPos = (egg:IsA("Model") and egg.PrimaryPart and egg.PrimaryPart.Position) or (egg:IsA("BasePart") and egg.Position) or egg:GetModelCFrame().Position
-            
-            -- Konversi koordinat Object (Egg) relatif terhadap arah hadap Kamera
-            local rel = cam.CFrame:PointToObjectSpace(eggPos)
-            
-            -- X adalah Kanan(+)/Kiri(-), Z adalah Belakang(+)/Depan(-)
-            -- Kita memproyeksikannya ke radar datar (math.atan2)
-            local angle = math.atan2(rel.Z, rel.X)
-            
-            -- Hitung posisi panah mengelilingi titik tengah radar dengan jari-jari 50
-            local radius = 50 
-            local x = math.cos(angle) * radius
-            local y = math.sin(angle) * radius
-            
-            -- Buat atau gunakan kembali TextLabel panah
-            local arrow = radarBillboard:FindFirstChild("Arrow_" .. i)
-            if not arrow then
-                arrow = Instance.new("TextLabel")
-                arrow.Name = "Arrow_" .. i
-                arrow.Size = UDim2.new(0, 20, 0, 20)
-                arrow.AnchorPoint = Vector2.new(0.5, 0.5)
-                arrow.BackgroundTransparency = 1
-                arrow.Text = "➤" -- Panah menunjuk ke kanan di orientasi 0 derajat
-                arrow.Font = Enum.Font.GothamBlack
-                arrow.TextSize = 20
-                arrow.TextStrokeTransparency = 0 -- Outline hitam agar jelas
-                arrow.Parent = radarBillboard
+    -- === AUTO AIMBOT LOGIC ===
+    if aimActivelyLocked and root then
+        local bestTarget = nil
+        local shortestDist = math.huge
+        local foundTimeEgg = false
+
+        for egg, _ in pairs(activeEggInstances) do
+            if egg.Parent and targetEggs[egg.Name] then
+                local eggPos = (egg:IsA("Model") and egg.PrimaryPart and egg.PrimaryPart.Position) or (egg:IsA("BasePart") and egg.Position) or egg:GetModelCFrame().Position
+                local dist = (root.Position - eggPos).Magnitude
+                
+                if egg.Name == "Time Egg" then
+                    if not foundTimeEgg then bestTarget = eggPos; shortestDist = dist; foundTimeEgg = true
+                    elseif dist < shortestDist then bestTarget = eggPos; shortestDist = dist end
+                elseif not foundTimeEgg then
+                    if dist < shortestDist then bestTarget = eggPos; shortestDist = dist end
+                end
             end
-            
-            -- Samakan warna panah dengan tipe telur
-            if egg.Name == "Time Egg" then arrow.TextColor3 = Color3.fromRGB(85, 255, 255)
-            elseif egg.Name == "Galaxy Egg" then arrow.TextColor3 = Color3.fromRGB(170, 0, 255)
-            elseif egg.Name == "Phoenix Egg" then arrow.TextColor3 = Color3.fromRGB(255, 85, 0)
-            else arrow.TextColor3 = Color3.fromRGB(255, 255, 0) end
-            
-            arrow.Position = UDim2.new(0.5, x, 0.5, y)
-            arrow.Rotation = math.deg(angle)
-            arrow.Visible = true
-            
-            i = i + 1
         end
+        if bestTarget then cam.CFrame = CFrame.new(cam.CFrame.Position, bestTarget) end
     end
 end)
 table.insert(connections, renderConnection)
@@ -622,9 +588,7 @@ table.insert(connections, renderConnection)
 -- 6. LOGIKA SERVER HOP
 -----------------------------------
 local function fetchServers()
-    for _, child in pairs(serverScroll:GetChildren()) do
-        if child:IsA("Frame") then child:Destroy() end
-    end
+    for _, child in pairs(serverScroll:GetChildren()) do if child:IsA("Frame") then child:Destroy() end end
     local url = "https://games.roblox.com/v1/games/" .. tostring(game.PlaceId) .. "/servers/Public?sortOrder=Desc&limit=100"
     local success, response = pcall(function() return game:HttpGet(url) end)
     if success and response then
@@ -635,39 +599,25 @@ local function fetchServers()
                 if srv.playing and srv.maxPlayers and srv.id ~= game.JobId then
                     count = count + 1
                     local srvItem = Instance.new("Frame")
-                    srvItem.Size = UDim2.new(1, 0, 0, 30)
-                    srvItem.BackgroundColor3 = Color3.fromRGB(40, 40, 40)
-                    srvItem.BorderSizePixel = 0
-                    srvItem.Parent = serverScroll
+                    srvItem.Size = UDim2.new(1, 0, 0, 30); srvItem.BackgroundColor3 = Color3.fromRGB(40, 40, 40); srvItem.BorderSizePixel = 0; srvItem.Parent = serverScroll
                     Instance.new("UICorner", srvItem).CornerRadius = UDim.new(0, 4)
 
                     local isVisited = visitedServers[srv.id] or false
                     local srvText = Instance.new("TextLabel")
-                    srvText.Size = UDim2.new(0.7, -5, 1, 0)
-                    srvText.Position = UDim2.new(0, 5, 0, 0)
-                    srvText.BackgroundTransparency = 1
+                    srvText.Size = UDim2.new(0.7, -5, 1, 0); srvText.Position = UDim2.new(0, 5, 0, 0); srvText.BackgroundTransparency = 1
                     srvText.Text = "Players: " .. srv.playing .. "/" .. srv.maxPlayers .. (isVisited and " (Visited)" or "")
                     srvText.TextColor3 = isVisited and Color3.fromRGB(150, 150, 150) or Color3.fromRGB(255, 255, 255)
-                    srvText.Font = Enum.Font.Gotham
-                    srvText.TextSize = 12
-                    srvText.TextXAlignment = Enum.TextXAlignment.Left
-                    srvText.Parent = srvItem
+                    srvText.Font = Enum.Font.Gotham; srvText.TextSize = 12; srvText.TextXAlignment = Enum.TextXAlignment.Left; srvText.Parent = srvItem
 
                     local joinBtn = Instance.new("TextButton")
-                    joinBtn.Size = UDim2.new(0.3, -5, 0, 24)
-                    joinBtn.Position = UDim2.new(0.7, 0, 0, 3)
+                    joinBtn.Size = UDim2.new(0.3, -5, 0, 24); joinBtn.Position = UDim2.new(0.7, 0, 0, 3)
                     joinBtn.BackgroundColor3 = isVisited and Color3.fromRGB(139, 0, 0) or Color3.fromRGB(46, 204, 113)
-                    joinBtn.Text = "Join"
-                    joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
-                    joinBtn.Font = Enum.Font.GothamBold
-                    joinBtn.TextSize = 12
-                    joinBtn.Parent = srvItem
+                    joinBtn.Text = "Join"; joinBtn.TextColor3 = Color3.fromRGB(255, 255, 255); joinBtn.Font = Enum.Font.GothamBold; joinBtn.TextSize = 12; joinBtn.Parent = srvItem
                     Instance.new("UICorner", joinBtn).CornerRadius = UDim.new(0, 4)
 
                     joinBtn.MouseButton1Click:Connect(function()
                         joinBtn.Text = "Joining..."
-                        visitedServers[srv.id] = true
-                        saveData(SERVER_SAVE_FILE, visitedServers)
+                        visitedServers[srv.id] = true; saveData(SERVER_SAVE_FILE, visitedServers)
                         TeleportService:TeleportToPlaceInstance(game.PlaceId, srv.id, localPlayer)
                     end)
                 end
@@ -680,7 +630,7 @@ refreshSrvBtn.MouseButton1Click:Connect(function() refreshSrvBtn.Text = "Fetchin
 resetSrvBtn.MouseButton1Click:Connect(function() visitedServers = { [game.JobId] = true }; saveData(SERVER_SAVE_FILE, visitedServers); fetchServers() end)
 
 -----------------------------------
--- 7. CLEANUP (KETIKA DI-RE-EXECUTE)
+-- 7. CLEANUP
 -----------------------------------
 screenGui.Destroying:Connect(function()
     for _, conn in pairs(connections) do
