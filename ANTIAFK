@@ -1,0 +1,25 @@
+
+if getgenv().AntiAFK_Loaded then
+    warn("Anti-AFK sudah berjalan di latar belakang.")
+    return
+end
+getgenv().AntiAFK_Loaded = true
+
+local Players = game:GetService("Players")
+local VirtualUser = game:GetService("VirtualUser")
+local LocalPlayer = Players.LocalPlayer
+
+pcall(function()
+    if getconnections then
+        for _, connection in pairs(getconnections(LocalPlayer.Idled)) do
+            if connection["Disable"] then
+                connection:Disable()
+            end
+        end
+    end
+end)
+
+LocalPlayer.Idled:Connect(function()
+    VirtualUser:CaptureController()
+    VirtualUser:ClickButton2(Vector2.new())
+end)
