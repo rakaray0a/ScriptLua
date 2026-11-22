@@ -1,0 +1,407 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local playerGui = player:WaitForChild("PlayerGui")
+local trainTapRemote = ReplicatedStorage:WaitForChild("Remotes"):WaitForChild("TrainTap")
+
+-- Pengaturan akurasi & kecepatan
+local autoTapEnabled = true
+local GLOBAL_COOLDOWN = 0.08 -- jeda minimum antar tembakan agar tidak spam berlebihan
+local PER_OBJECT_COOLDOWN = 0.22 -- jeda ulang untuk objek yang sama
+local lastGlobalFire = 0
+local lastObjectFire = setmetatable({}, { __mode = "k" })
+
+local function getUiParent()
+	if typeof(gethui) == "function" then
+		local ok, hui = pcall(gethui)
+		if ok and hui then return hui end
+	end
+	local okCore, coreGui = pcall(function()
+		return game:GetService("CoreGui")
+	end)
+	if okCore and coreGui then return coreGui end
+	return playerGui
+end
+
+local uiParent = getUiParent()
+local oldUi = uiParent:FindFirstChild("AutoTrainTapUI")
+if oldUi then oldUi:Destroy() end
+
+-- ==========================================
+-- UI KONTROL (DRAG, RESIZE, MINIMIZE)
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "AutoTrainTapUI"
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.Parent = uiParent
+
+local MIN_W, MIN_H = 180, 108
+local MAX_W, MAX_H = 350, 200
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainFrame"
+mainFrame.Size = UDim2.fromOffset(215, 122)
+mainFrame.Position = UDim2.fromScale(0.72, 0.2)
+mainFrame.BackgroundColor3 = Color3.fromRGB(24, 26, 32)
+mainFrame.BorderSizePixel = 0
+mainFrame.Active = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 10)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = Color3.fromRGB(65, 70, 84)
+mainStroke.Thickness = 1
+mainStroke.Parent = mainFrame
+
+local header = Instance.new("Frame")
+header.Name = "Header"
+header.Size = UDim2.new(1, 0, 0, 28)
+header.BackgroundColor3 = Color3.fromRGB(34, 37, 46)
+header.BorderSizePixel = 0
+header.Active = true
+header.Parent = mainFrame
+
+local headerCorner = Instance.new("UICorner")
+headerCorner.CornerRadius = UDim.new(0, 10)
+headerCorner.Parent = header
+
+local titleLabel = Instance.new("TextLabel")
+titleLabel.Size = UDim2.new(1, -40, 1, 0)
+titleLabel.Position = UDim2.fromOffset(10, 0)
+titleLabel.BackgroundTransparency = 1
+titleLabel.Text = "Auto TrainTap"
+titleLabel.TextColor3 = Color3.fromRGB(240, 244, 248)
+titleLabel.TextSize = 13
+titleLabel.Font = Enum.Font.GothamBold
+titleLabel.TextXAlignment = Enum.TextXAlignment.Left
+titleLabel.Parent = header
+
+local minimizeBtn = Instance.new("TextButton")
+minimizeBtn.Name = "MinimizeBtn"
+minimizeBtn.Size = UDim2.fromOffset(24, 22)
+minimizeBtn.Position = UDim2.new(1, -28, 0.5, -11)
+minimizeBtn.BackgroundColor3 = Color3.fromRGB(50, 55, 68)
+minimizeBtn.Text = "-"
+minimizeBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+minimizeBtn.TextSize = 16
+minimizeBtn.Font = Enum.Font.GothamBold
+minimizeBtn.Parent = header
+
+local minCorner = Instance.new("UICorner")
+minCorner.CornerRadius = UDim.new(0, 6)
+minCorner.Parent = minimizeBtn
+
+local toggleBtn = Instance.new("TextButton")
+toggleBtn.Name = "ToggleBtn"
+toggleBtn.Size = UDim2.new(1, -20, 0, 36)
+toggleBtn.Position = UDim2.fromOffset(10, 34)
+toggleBtn.BackgroundColor3 = Color3.fromRGB(46, 160, 67)
+toggleBtn.Text = "AUTO TAP: ON"
+toggleBtn.TextColor3 = Color3.fromRGB(255, 255, 255)
+toggleBtn.TextSize = 14
+toggleBtn.Font = Enum.Font.GothamBold
+toggleBtn.Parent = mainFrame
+
+local toggleCorner = Instance.new("UICorner")
+toggleCorner.CornerRadius = UDim.new(0, 8)
+toggleCorner.Parent = toggleBtn
+
+local infoLabel = Instance.new("TextLabel")
+infoLabel.Name = "InfoLabel"
+infoLabel.Size = UDim2.new(1, -28, 0, 34)
+infoLabel.Position = UDim2.fromOffset(10, 76)
+infoLabel.BackgroundTransparency = 1
+infoLabel.Text = "Status: Mode responsif aktif"
+infoLabel.TextColor3 = Color3.fromRGB(185, 195, 210)
+infoLabel.TextSize = 11
+infoLabel.Font = Enum.Font.Gotham
+infoLabel.TextXAlignment = Enum.TextXAlignment.Left
+infoLabel.TextYAlignment = Enum.TextYAlignment.Top
+infoLabel.TextWrapped = true
+infoLabel.Parent = mainFrame
+
+local resizeHandle = Instance.new("TextButton")
+resizeHandle.Name = "ResizeHandle"
+resizeHandle.Size = UDim2.fromOffset(18, 18)
+resizeHandle.Position = UDim2.new(1, -18, 1, -18)
+resizeHandle.BackgroundColor3 = Color3.fromRGB(70, 76, 92)
+resizeHandle.Text = "↘"
+resizeHandle.TextColor3 = Color3.fromRGB(210, 215, 225)
+resizeHandle.TextSize = 11
+resizeHandle.Font = Enum.Font.GothamBold
+resizeHandle.Parent = mainFrame
+
+local resizeCorner = Instance.new("UICorner")
+resizeCorner.CornerRadius = UDim.new(0, 6)
+resizeCorner.Parent = resizeHandle
+
+local miniIcon = Instance.new("TextButton")
+miniIcon.Name = "MiniIcon"
+miniIcon.Size = UDim2.fromOffset(48, 48)
+miniIcon.Position = UDim2.fromScale(0.85, 0.2)
+miniIcon.BackgroundColor3 = Color3.fromRGB(46, 160, 67)
+miniIcon.Text = "TAP"
+miniIcon.TextColor3 = Color3.fromRGB(255, 255, 255)
+miniIcon.TextSize = 13
+miniIcon.Font = Enum.Font.GothamBold
+miniIcon.Visible = false
+miniIcon.Active = true
+miniIcon.Parent = screenGui
+
+local miniCorner = Instance.new("UICorner")
+miniCorner.CornerRadius = UDim.new(1, 0)
+miniCorner.Parent = miniIcon
+
+local miniStroke = Instance.new("UIStroke")
+miniStroke.Color = Color3.fromRGB(255, 255, 255)
+miniStroke.Thickness = 1.5
+miniStroke.Parent = miniIcon
+
+local function setStatus(txt)
+	infoLabel.Text = txt
+end
+
+local function refreshToggleVisual()
+	if autoTapEnabled then
+		toggleBtn.Text = "AUTO TAP: ON"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(46, 160, 67)
+		miniIcon.BackgroundColor3 = Color3.fromRGB(46, 160, 67)
+		setStatus("Status: Mode responsif aktif")
+	else
+		toggleBtn.Text = "AUTO TAP: OFF"
+		toggleBtn.BackgroundColor3 = Color3.fromRGB(185, 55, 55)
+		miniIcon.BackgroundColor3 = Color3.fromRGB(185, 55, 55)
+		setStatus("Status: Dijeda (OFF)")
+	end
+end
+
+toggleBtn.MouseButton1Click:Connect(function()
+	autoTapEnabled = not autoTapEnabled
+	refreshToggleVisual()
+end)
+
+minimizeBtn.MouseButton1Click:Connect(function()
+	miniIcon.Position = mainFrame.Position
+	mainFrame.Visible = false
+	miniIcon.Visible = true
+end)
+
+miniIcon.MouseButton1Click:Connect(function()
+	mainFrame.Position = miniIcon.Position
+	miniIcon.Visible = false
+	mainFrame.Visible = true
+end)
+
+local draggingTarget = nil
+local dragInput = nil
+local dragStartPos = Vector2.zero
+local frameStartPos = UDim2.new()
+
+local resizing = false
+local resizeInput = nil
+local resizeStartPos = Vector2.zero
+local resizeStartSize = Vector2.zero
+
+local function isPointerInput(input)
+	return input.UserInputType == Enum.UserInputType.MouseButton1
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+local function isPointerMove(input)
+	return input.UserInputType == Enum.UserInputType.MouseMovement
+		or input.UserInputType == Enum.UserInputType.Touch
+end
+
+header.InputBegan:Connect(function(input)
+	if isPointerInput(input) and not resizing then
+		draggingTarget = mainFrame
+		dragInput = input
+		dragStartPos = input.Position
+		frameStartPos = mainFrame.Position
+	end
+end)
+
+miniIcon.InputBegan:Connect(function(input)
+	if isPointerInput(input) then
+		draggingTarget = miniIcon
+		dragInput = input
+		dragStartPos = input.Position
+		frameStartPos = miniIcon.Position
+	end
+end)
+
+resizeHandle.InputBegan:Connect(function(input)
+	if isPointerInput(input) then
+		resizing = true
+		resizeInput = input
+		resizeStartPos = input.Position
+		resizeStartSize = Vector2.new(mainFrame.AbsoluteSize.X, mainFrame.AbsoluteSize.Y)
+	end
+end)
+
+UserInputService.InputChanged:Connect(function(input)
+	if not isPointerMove(input) then return end
+
+	if draggingTarget and input == dragInput then
+		local delta = input.Position - dragStartPos
+		draggingTarget.Position = UDim2.new(
+			frameStartPos.X.Scale,
+			frameStartPos.X.Offset + delta.X,
+			frameStartPos.Y.Scale,
+			frameStartPos.Y.Offset + delta.Y
+		)
+	elseif resizing and input == resizeInput then
+		local delta = input.Position - resizeStartPos
+		local newW = math.clamp(resizeStartSize.X + delta.X, MIN_W, MAX_W)
+		local newH = math.clamp(resizeStartSize.Y + delta.Y, MIN_H, MAX_H)
+		mainFrame.Size = UDim2.fromOffset(newW, newH)
+	end
+end)
+
+UserInputService.InputEnded:Connect(function(input)
+	if input == dragInput then
+		draggingTarget = nil
+		dragInput = nil
+	end
+	if input == resizeInput then
+		resizing = false
+		resizeInput = nil
+	end
+end)
+
+-- ==========================================
+-- DETEKSI & EKSEKUSI CEPAT
+-- ==========================================
+local function isInsideViewport(obj)
+	local camera = workspace.CurrentCamera
+	local vpSize = camera and camera.ViewportSize or Vector2.new(1920, 1080)
+	local pos = obj.AbsolutePosition
+	local size = obj.AbsoluteSize
+
+	if size.X < 20 or size.Y < 20 then
+		return false
+	end
+
+	if size.X > vpSize.X * 0.85 and size.Y > vpSize.Y * 0.85 then
+		return false
+	end
+
+	local overlapsX = (pos.X + size.X) > 0 and pos.X < vpSize.X
+	local overlapsY = (pos.Y + size.Y) > 0 and pos.Y < vpSize.Y
+	return overlapsX and overlapsY
+end
+
+local function isTapButtonVisible(obj)
+	if not obj or not obj:IsA("GuiObject") then return false end
+	if not obj.Visible then return false end
+	if not isInsideViewport(obj) then return false end
+
+	if obj:IsA("ImageLabel") or obj:IsA("ImageButton") then
+		if obj.ImageTransparency >= 0.9 then
+			return false
+		end
+	end
+
+	if obj:IsA("TextLabel") or obj:IsA("TextButton") then
+		if obj.TextTransparency >= 0.9 then
+			return false
+		end
+	end
+
+	local guiAncestor = obj:FindFirstAncestorOfClass("ScreenGui")
+	if not guiAncestor or not guiAncestor.Enabled then
+		return false
+	end
+
+	local current = obj.Parent
+	while current and current ~= guiAncestor do
+		if current:IsA("GuiObject") and not current.Visible then
+			return false
+		end
+		current = current.Parent
+	end
+
+	return true
+end
+
+local function tryFireSignal(button)
+	if typeof(firesignal) == "function" then
+		for _, sigName in ipairs({ "Activated", "MouseButton1Click", "MouseButton1Down" }) do
+			local ok, sig = pcall(function()
+				return button[sigName]
+			end)
+			if ok and sig then
+				pcall(firesignal, sig)
+			end
+		end
+	end
+end
+
+local function pressNow(obj)
+	local now = os.clock()
+	if (now - lastGlobalFire) < GLOBAL_COOLDOWN then
+		return
+	end
+
+	local prevObjTime = lastObjectFire[obj]
+	if prevObjTime and (now - prevObjTime) < PER_OBJECT_COOLDOWN then
+		return
+	end
+
+	lastGlobalFire = now
+	lastObjectFire[obj] = now
+
+	if obj:IsA("GuiButton") then
+		tryFireSignal(obj)
+	end
+
+	local ok, err = pcall(function()
+		trainTapRemote:FireServer()
+	end)
+
+	if ok then
+		local p = obj.AbsolutePosition
+		setStatus(string.format("Tap @ (%d, %d) [%s]", math.floor(p.X), math.floor(p.Y), obj.Name))
+	else
+		setStatus("Error: " .. tostring(err))
+	end
+end
+
+local lastSeenPosMap = setmetatable({}, { __mode = "k" })
+local wasVisibleMap = setmetatable({}, { __mode = "k" })
+
+RunService.Heartbeat:Connect(function()
+	if not autoTapEnabled then return end
+
+	for _, gui in ipairs(playerGui:GetChildren()) do
+		if gui:IsA("ScreenGui") and (gui.Name == "TrainTap" or gui.Name == "TrainTapEdge") and gui.Enabled then
+			for _, desc in ipairs(gui:GetDescendants()) do
+				if desc:IsA("GuiObject") then
+					local visibleNow = isTapButtonVisible(desc)
+					local wasVisible = wasVisibleMap[desc] == true
+					local curPos = desc.AbsolutePosition
+					local prevPos = lastSeenPosMap[desc]
+					local movedSignificantly = prevPos and ((curPos - prevPos).Magnitude > 8)
+
+					if visibleNow then
+						if (not wasVisible) or movedSignificantly then
+							wasVisibleMap[desc] = true
+							lastSeenPosMap[desc] = curPos
+							pressNow(desc)
+						end
+					else
+						wasVisibleMap[desc] = false
+						lastSeenPosMap[desc] = nil
+					end
+				end
+			end
+		end
+	end
+end)
