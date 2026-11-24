@@ -1,0 +1,725 @@
+-- Universal Executor Server Hopper (PC & Mobile / Delta)
+-- Fitur: Realtime Server List (Sorted Lowest Players First), Join Button, Visited Marker + Reset, Drag, Resize, Minimize to Square Icon
+
+local Players = game:GetService("Players")
+local TeleportService = game:GetService("TeleportService")
+local HttpService = game:GetService("HttpService")
+local UserInputService = game:GetService("UserInputService")
+local CoreGui = game:GetService("CoreGui")
+
+local player = Players.LocalPlayer
+local PLACE_ID = game.PlaceId
+local CURRENT_JOB_ID = game.JobId ~= "" and game.JobId or "LOCAL_INSTANCE"
+
+-- ==========================================
+-- 1. ANTI-STACKING GUARD (REPLACE OLD UI)
+-- ==========================================
+local GUI_NAME = "Blubub_ServerHopper_V2"
+
+local function getUiParent()
+	local ok, result = pcall(function()
+		if gethui then
+			return gethui()
+		end
+		return CoreGui
+	end)
+	if ok and result then
+		return result
+	end
+	return player:WaitForChild("PlayerGui")
+end
+
+local uiParent = getUiParent()
+
+for _, child in ipairs(uiParent:GetChildren()) do
+	if child.Name == GUI_NAME then
+		child:Destroy()
+	end
+end
+
+if _G.BlububServerHopperCleanup then
+	pcall(_G.BlububServerHopperCleanup)
+end
+
+local active = true
+local connections = {}
+
+local function trackConn(conn)
+	table.insert(connections, conn)
+	return conn
+end
+
+_G.BlububServerHopperCleanup = function()
+	active = false
+	for _, conn in ipairs(connections) do
+		pcall(function()
+			conn:Disconnect()
+		end)
+	end
+	table.clear(connections)
+end
+
+-- ==========================================
+-- 2. VISITED SERVERS + PERSISTENCE + RESET
+-- ==========================================
+local SAVE_FILE = "blubub_visited_servers_" .. tostring(PLACE_ID) .. ".json"
+local visitedServers = {}
+
+local hasFileSystem = (type(isfile) == "function") and (type(readfile) == "function") and (type(writefile) == "function")
+
+local function saveVisited()
+	if not hasFileSystem then
+		return
+	end
+	pcall(function()
+		writefile(SAVE_FILE, HttpService:JSONEncode(visitedServers))
+	end)
+end
+
+local function loadVisited()
+	table.clear(visitedServers)
+	if hasFileSystem then
+		pcall(function()
+			if isfile(SAVE_FILE) then
+				local raw = readfile(SAVE_FILE)
+				local decoded = HttpService:JSONDecode(raw)
+				if type(decoded) == "table" then
+					for k, v in pairs(decoded) do
+						if v == true then
+							visitedServers[tostring(k)] = true
+						end
+					end
+				end
+			end
+		end)
+	end
+	if CURRENT_JOB_ID ~= "LOCAL_INSTANCE" then
+		visitedServers[CURRENT_JOB_ID] = true
+		saveVisited()
+	end
+end
+
+local function markVisited(jobId)
+	if type(jobId) == "string" and jobId ~= "" then
+		visitedServers[jobId] = true
+		saveVisited()
+	end
+end
+
+local function isVisited(jobId)
+	return visitedServers[tostring(jobId)] == true
+end
+
+local function resetVisited()
+	table.clear(visitedServers)
+	if CURRENT_JOB_ID ~= "LOCAL_INSTANCE" then
+		visitedServers[CURRENT_JOB_ID] = true
+	end
+	saveVisited()
+end
+
+loadVisited()
+
+-- ==========================================
+-- 3. REALTIME SERVER FETCHER & SORT ASCENDING
+-- ==========================================
+local function doHttpGet(url)
+	local reqFunc = (type(request) == "function" and request)
+		or (type(http_request) == "function" and http_request)
+		or (syn and type(syn.request) == "function" and syn.request)
+
+	if reqFunc then
+		local ok, res = pcall(function()
+			return reqFunc({
+				Url = url,
+				Method = "GET",
+				Headers = {
+					["Accept"] = "application/json",
+					["User-Agent"] = "Mozilla/5.0"
+				}
+			})
+		end)
+		if ok and type(res) == "table" and type(res.Body) == "string" then
+			return true, res.Body
+		end
+	end
+
+	local ok2, body2 = pcall(function()
+		return game:HttpGet(url)
+	end)
+	if ok2 and type(body2) == "string" then
+		return true, body2
+	end
+
+	return false, "HTTP request tidak didukung / diblokir"
+end
+
+local function sortServersLowestPlayers(list)
+	table.sort(list, function(a, b)
+		local pA = tonumber(a.Playing) or 0
+		local pB = tonumber(b.Playing) or 0
+		if pA ~= pB then
+			return pA < pB
+		end
+		local pingA = tonumber(a.Ping) or math.huge
+		local pingB = tonumber(b.Ping) or math.huge
+		if pingA ~= pingB then
+			return pingA < pingB
+		end
+		return tostring(a.JobId) < tostring(b.JobId)
+	end)
+	return list
+end
+
+local function fetchRealtimeServers(cursor)
+	local baseUrl = string.format(
+		"https://games.roblox.com/v1/games/%d/servers/Public?sortOrder=Asc&limit=100%s",
+		PLACE_ID,
+		(cursor and cursor ~= "" and ("&cursor=" .. HttpService:UrlEncode(cursor)) or "")
+	)
+
+	local ok, rawBody = doHttpGet(baseUrl)
+	if not ok then
+		return nil, tostring(rawBody)
+	end
+
+	local decOk, data = pcall(function()
+		return HttpService:JSONDecode(rawBody)
+	end)
+	if not decOk or type(data) ~= "table" or type(data.data) ~= "table" then
+		return nil, "Gagal memparse JSON server"
+	end
+
+	local list = {}
+	for _, srv in ipairs(data.data) do
+		if type(srv) == "table" and type(srv.id) == "string" then
+			table.insert(list, {
+				JobId = srv.id,
+				Playing = tonumber(srv.playing) or 0,
+				MaxPlayers = tonumber(srv.maxPlayers) or Players.MaxPlayers,
+				Ping = tonumber(srv.ping) or 0,
+				Fps = tonumber(srv.fps) or 0
+			})
+		end
+	end
+
+	sortServersLowestPlayers(list)
+	return list, data.nextPageCursor
+end
+
+-- ==========================================
+-- 4. MODERN UI (DRAG, MINIMIZE ICON, RESIZE)
+-- ==========================================
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = GUI_NAME
+screenGui.ResetOnSpawn = false
+screenGui.ZIndexBehavior = Enum.ZIndexBehavior.Sibling
+screenGui.DisplayOrder = 9999
+screenGui.Parent = uiParent
+
+local C_BG = Color3.fromRGB(15, 18, 25)
+local C_SURFACE = Color3.fromRGB(23, 28, 39)
+local C_CARD = Color3.fromRGB(30, 36, 50)
+local C_CARD_VISITED = Color3.fromRGB(22, 39, 36)
+local C_BORDER = Color3.fromRGB(51, 65, 85)
+local C_ACCENT = Color3.fromRGB(56, 189, 248)
+local C_SUCCESS = Color3.fromRGB(16, 185, 129)
+local C_WARN = Color3.fromRGB(245, 158, 11)
+local C_DANGER = Color3.fromRGB(239, 68, 68)
+local C_TEXT = Color3.fromRGB(241, 245, 249)
+local C_MUTED = Color3.fromRGB(148, 163, 184)
+
+local MIN_W, MIN_H = 320, 250
+local MAX_W, MAX_H = 760, 620
+
+local mainFrame = Instance.new("Frame")
+mainFrame.Name = "MainWindow"
+mainFrame.Size = UDim2.fromOffset(460, 370)
+mainFrame.Position = UDim2.new(0.5, -230, 0.5, -185)
+mainFrame.BackgroundColor3 = C_BG
+mainFrame.BorderSizePixel = 0
+mainFrame.ClipsDescendants = true
+mainFrame.Parent = screenGui
+
+local mainCorner = Instance.new("UICorner")
+mainCorner.CornerRadius = UDim.new(0, 14)
+mainCorner.Parent = mainFrame
+
+local mainStroke = Instance.new("UIStroke")
+mainStroke.Color = C_BORDER
+mainStroke.Thickness = 1.2
+mainStroke.Parent = mainFrame
+
+local miniIcon = Instance.new("TextButton")
+miniIcon.Name = "MinimizedSquareIcon"
+miniIcon.Size = UDim2.fromOffset(48, 48)
+miniIcon.Position = UDim2.new(0, 20, 0.5, -24)
+miniIcon.BackgroundColor3 = C_SURFACE
+miniIcon.Text = "SH"
+miniIcon.TextColor3 = C_ACCENT
+miniIcon.Font = Enum.Font.GothamBlack
+miniIcon.TextSize = 15
+miniIcon.Visible = false
+miniIcon.AutoButtonColor = true
+miniIcon.ZIndex = 20
+miniIcon.Parent = screenGui
+
+local miniCorner = Instance.new("UICorner")
+miniCorner.CornerRadius = UDim.new(0, 12)
+miniCorner.Parent = miniIcon
+
+local miniStroke = Instance.new("UIStroke")
+miniStroke.Color = C_ACCENT
+miniStroke.Thickness = 1.6
+miniStroke.Parent = miniIcon
+
+local topBar = Instance.new("Frame")
+topBar.Name = "TopBar"
+topBar.Size = UDim2.new(1, 0, 0, 44)
+topBar.BackgroundColor3 = C_SURFACE
+topBar.BorderSizePixel = 0
+topBar.Parent = mainFrame
+
+local topCorner = Instance.new("UICorner")
+topCorner.CornerRadius = UDim.new(0, 14)
+topCorner.Parent = topBar
+
+local topFix = Instance.new("Frame")
+topFix.Size = UDim2.new(1, 0, 0, 14)
+topFix.Position = UDim2.new(0, 0, 1, -14)
+topFix.BackgroundColor3 = C_SURFACE
+topFix.BorderSizePixel = 0
+topFix.Parent = topBar
+
+local accentDot = Instance.new("Frame")
+accentDot.Size = UDim2.fromOffset(10, 10)
+accentDot.Position = UDim2.new(0, 14, 0.5, -5)
+accentDot.BackgroundColor3 = C_ACCENT
+accentDot.BorderSizePixel = 0
+accentDot.Parent = topBar
+
+local dotCorner = Instance.new("UICorner")
+dotCorner.CornerRadius = UDim.new(1, 0)
+dotCorner.Parent = accentDot
+
+local titleText = Instance.new("TextLabel")
+titleText.Size = UDim2.new(1, -110, 1, 0)
+titleText.Position = UDim2.fromOffset(32, 0)
+titleText.BackgroundTransparency = 1
+titleText.Text = "SERVER HOPPER  •  LOWEST PLAYERS"
+titleText.TextColor3 = C_TEXT
+titleText.Font = Enum.Font.GothamBold
+titleText.TextSize = 13
+titleText.TextXAlignment = Enum.TextXAlignment.Left
+titleText.Parent = topBar
+
+local function makeWindowBtn(text, offsetX, bgColor)
+	local btn = Instance.new("TextButton")
+	btn.Size = UDim2.fromOffset(30, 26)
+	btn.Position = UDim2.new(1, offsetX, 0.5, -13)
+	btn.BackgroundColor3 = bgColor
+	btn.Text = text
+	btn.TextColor3 = C_TEXT
+	btn.Font = Enum.Font.GothamBold
+	btn.TextSize = 13
+	btn.AutoButtonColor = true
+	btn.Parent = topBar
+
+	local c = Instance.new("UICorner")
+	c.CornerRadius = UDim.new(0, 7)
+	c.Parent = btn
+	return btn
+end
+
+local minBtn = makeWindowBtn("—", -68, C_CARD)
+local closeBtn = makeWindowBtn("✕", -34, C_DANGER)
+
+local controls = Instance.new("Frame")
+controls.Name = "Controls"
+controls.Size = UDim2.new(1, -24, 0, 34)
+controls.Position = UDim2.fromOffset(12, 52)
+controls.BackgroundTransparency = 1
+controls.Parent = mainFrame
+
+local refreshBtn = Instance.new("TextButton")
+refreshBtn.Size = UDim2.new(0.36, -4, 1, 0)
+refreshBtn.Position = UDim2.fromScale(0, 0)
+refreshBtn.BackgroundColor3 = C_ACCENT
+refreshBtn.Text = "⟳ Refresh"
+refreshBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
+refreshBtn.Font = Enum.Font.GothamBold
+refreshBtn.TextSize = 12
+refreshBtn.Parent = controls
+
+local refCorner = Instance.new("UICorner")
+refCorner.CornerRadius = UDim.new(0, 8)
+refCorner.Parent = refreshBtn
+
+local resetBtn = Instance.new("TextButton")
+resetBtn.Size = UDim2.new(0.36, -4, 1, 0)
+resetBtn.Position = UDim2.new(0.36, 2, 0, 0)
+resetBtn.BackgroundColor3 = C_WARN
+resetBtn.Text = "↺ Reset Tanda"
+resetBtn.TextColor3 = Color3.fromRGB(15, 15, 15)
+resetBtn.Font = Enum.Font.GothamBold
+resetBtn.TextSize = 12
+resetBtn.Parent = controls
+
+local rstCorner = Instance.new("UICorner")
+rstCorner.CornerRadius = UDim.new(0, 8)
+rstCorner.Parent = resetBtn
+
+local hideVisitedToggle = Instance.new("TextButton")
+hideVisitedToggle.Size = UDim2.new(0.28, 0, 1, 0)
+hideVisitedToggle.Position = UDim2.new(0.72, 0, 0, 0)
+hideVisitedToggle.BackgroundColor3 = C_CARD
+hideVisitedToggle.Text = "Semua: ON"
+hideVisitedToggle.TextColor3 = C_TEXT
+hideVisitedToggle.Font = Enum.Font.GothamBold
+hideVisitedToggle.TextSize = 11
+hideVisitedToggle.Parent = controls
+
+local togCorner = Instance.new("UICorner")
+togCorner.CornerRadius = UDim.new(0, 8)
+togCorner.Parent = hideVisitedToggle
+
+local togStroke = Instance.new("UIStroke")
+togStroke.Color = C_BORDER
+togStroke.Thickness = 1
+togStroke.Parent = hideVisitedToggle
+
+local statusBar = Instance.new("TextLabel")
+statusBar.Size = UDim2.new(1, -24, 0, 20)
+statusBar.Position = UDim2.fromOffset(12, 90)
+statusBar.BackgroundTransparency = 1
+statusBar.Text = "Menyiapkan daftar server (terkecil ke terbesar)..."
+statusBar.TextColor3 = C_MUTED
+statusBar.Font = Enum.Font.Code
+statusBar.TextSize = 11
+statusBar.TextXAlignment = Enum.TextXAlignment.Left
+statusBar.TextTruncate = Enum.TextTruncate.AtEnd
+statusBar.Parent = mainFrame
+
+local scrollList = Instance.new("ScrollingFrame")
+scrollList.Name = "ServerScroll"
+scrollList.Size = UDim2.new(1, -24, 1, -124)
+scrollList.Position = UDim2.fromOffset(12, 114)
+scrollList.BackgroundColor3 = C_SURFACE
+scrollList.BorderSizePixel = 0
+scrollList.ScrollBarThickness = 5
+scrollList.ScrollBarImageColor3 = C_ACCENT
+scrollList.CanvasSize = UDim2.fromOffset(0, 0)
+scrollList.Parent = mainFrame
+
+local scrollCorner = Instance.new("UICorner")
+scrollCorner.CornerRadius = UDim.new(0, 10)
+scrollCorner.Parent = scrollList
+
+local scrollStroke = Instance.new("UIStroke")
+scrollStroke.Color = C_BORDER
+scrollStroke.Thickness = 1
+scrollStroke.Parent = scrollList
+
+local listLayout = Instance.new("UIListLayout")
+listLayout.Padding = UDim.new(0, 7)
+listLayout.SortOrder = Enum.SortOrder.LayoutOrder
+listLayout.Parent = scrollList
+
+local listPad = Instance.new("UIPadding")
+listPad.PaddingTop = UDim.new(0, 8)
+listPad.PaddingBottom = UDim.new(0, 14)
+listPad.PaddingLeft = UDim.new(0, 8)
+listPad.PaddingRight = UDim.new(0, 8)
+listPad.Parent = scrollList
+
+trackConn(listLayout:GetPropertyChangedSignal("AbsoluteContentSize"):Connect(function()
+	scrollList.CanvasSize = UDim2.fromOffset(0, listLayout.AbsoluteContentSize.Y + 22)
+end))
+
+local resizeHandle = Instance.new("TextButton")
+resizeHandle.Name = "ResizeHandle"
+resizeHandle.Size = UDim2.fromOffset(22, 22)
+resizeHandle.Position = UDim2.new(1, -22, 1, -22)
+resizeHandle.BackgroundColor3 = C_CARD
+resizeHandle.Text = "⤡"
+resizeHandle.TextColor3 = C_ACCENT
+resizeHandle.Font = Enum.Font.GothamBold
+resizeHandle.TextSize = 13
+resizeHandle.ZIndex = 15
+resizeHandle.Parent = mainFrame
+
+local resCorner = Instance.new("UICorner")
+resCorner.CornerRadius = UDim.new(0, 6)
+resCorner.Parent = resizeHandle
+
+-- ==========================================
+-- 5. RENDER SERVER CARDS & JOIN ACTION
+-- ==========================================
+local cachedServers = {}
+local onlyUnvisited = false
+local isRefreshing = false
+
+local function clearCards()
+	for _, child in ipairs(scrollList:GetChildren()) do
+		if child:IsA("Frame") then
+			child:Destroy()
+		end
+	end
+end
+
+local function createCard(srv, orderIdx)
+	local jobId = tostring(srv.JobId)
+	local playing = tonumber(srv.Playing) or 0
+	local maxPlayers = tonumber(srv.MaxPlayers) or 20
+	local ping = tonumber(srv.Ping) or 0
+	local isCurrent = (jobId == CURRENT_JOB_ID)
+	local visited = isVisited(jobId)
+
+	if onlyUnvisited and visited and not isCurrent then
+		return
+	end
+
+	local card = Instance.new("Frame")
+	card.Name = "Card_" .. tostring(orderIdx)
+	card.Size = UDim2.new(1, -4, 0, 56)
+	card.LayoutOrder = orderIdx
+	card.BackgroundColor3 = visited and C_CARD_VISITED or C_CARD
+	card.BorderSizePixel = 0
+	card.Parent = scrollList
+
+	local cardCorner = Instance.new("UICorner")
+	cardCorner.CornerRadius = UDim.new(0, 9)
+	cardCorner.Parent = card
+
+	local cardStroke = Instance.new("UIStroke")
+	cardStroke.Color = isCurrent and C_ACCENT or (visited and C_SUCCESS or C_BORDER)
+	cardStroke.Thickness = (isCurrent or visited) and 1.2 or 0.8
+	cardStroke.Parent = card
+
+	local badgeText = visited and "SUDAH MASUK" or "BELUM MASUK"
+	local badgeColor = visited and C_SUCCESS or C_MUTED
+	if isCurrent then
+		badgeText = "SERVER SAAT INI"
+		badgeColor = C_ACCENT
+	end
+
+	local statusTag = Instance.new("TextLabel")
+	statusTag.Size = UDim2.new(1, -104, 0, 16)
+	statusTag.Position = UDim2.fromOffset(10, 6)
+	statusTag.BackgroundTransparency = 1
+	statusTag.Text = "● " .. badgeText .. string.format("   |   %d/%d Players   |   %dms", playing, maxPlayers, ping)
+	statusTag.TextColor3 = badgeColor
+	statusTag.Font = Enum.Font.GothamBold
+	statusTag.TextSize = 11
+	statusTag.TextXAlignment = Enum.TextXAlignment.Left
+	statusTag.TextTruncate = Enum.TextTruncate.AtEnd
+	statusTag.Parent = card
+
+	local idLabel = Instance.new("TextLabel")
+	idLabel.Size = UDim2.new(1, -104, 0, 18)
+	idLabel.Position = UDim2.fromOffset(10, 26)
+	idLabel.BackgroundTransparency = 1
+	idLabel.Text = "JobId: " .. jobId
+	idLabel.TextColor3 = C_TEXT
+	idLabel.Font = Enum.Font.Code
+	idLabel.TextSize = 11
+	idLabel.TextXAlignment = Enum.TextXAlignment.Left
+	idLabel.TextTruncate = Enum.TextTruncate.AtEnd
+	idLabel.Parent = card
+
+	local joinBtn = Instance.new("TextButton")
+	joinBtn.Size = UDim2.fromOffset(82, 36)
+	joinBtn.Position = UDim2.new(1, -90, 0.5, -18)
+	joinBtn.BackgroundColor3 = isCurrent and C_BORDER or C_SUCCESS
+	joinBtn.Text = isCurrent and "Current" or "Join"
+	joinBtn.TextColor3 = isCurrent and C_MUTED or Color3.fromRGB(10, 20, 15)
+	joinBtn.Font = Enum.Font.GothamBold
+	joinBtn.TextSize = 12
+	joinBtn.Active = not isCurrent
+	joinBtn.Parent = card
+
+	local joinCorner = Instance.new("UICorner")
+	joinCorner.CornerRadius = UDim.new(0, 8)
+	joinCorner.Parent = joinBtn
+
+	trackConn(joinBtn.MouseButton1Click:Connect(function()
+		if isCurrent or jobId == "" then
+			return
+		end
+		markVisited(jobId)
+		joinBtn.Text = "Hopping..."
+		joinBtn.BackgroundColor3 = C_ACCENT
+		joinBtn.TextColor3 = Color3.fromRGB(10, 15, 25)
+		statusBar.Text = "Teleport ke JobId: " .. jobId
+
+		local ok, err = pcall(function()
+			TeleportService:TeleportToPlaceInstance(PLACE_ID, jobId, player)
+		end)
+
+		if not ok then
+			statusBar.Text = "Gagal hop: " .. tostring(err)
+			joinBtn.Text = "Join"
+			joinBtn.BackgroundColor3 = C_SUCCESS
+			joinBtn.TextColor3 = Color3.fromRGB(10, 20, 15)
+			renderCards()
+		end
+	end))
+end
+
+function renderCards()
+	sortServersLowestPlayers(cachedServers)
+	clearCards()
+	local shown = 0
+	for idx, srv in ipairs(cachedServers) do
+		createCard(srv, idx)
+		shown += 1
+	end
+	statusBar.Text = string.format("Sort: Terkecil | Servers: %d (Tampil: %d)", #cachedServers, shown)
+end
+
+local function refreshServers()
+	if isRefreshing or not active then
+		return
+	end
+	isRefreshing = true
+	refreshBtn.Text = "..."
+	statusBar.Text = "Mengambil daftar server (terkecil ke terbesar)..."
+
+	task.spawn(function()
+		local list, errOrCursor = fetchRealtimeServers(nil)
+		if not active then
+			return
+		end
+		if list then
+			cachedServers = list
+			renderCards()
+		else
+			statusBar.Text = "Error fetch: " .. tostring(errOrCursor)
+		end
+		refreshBtn.Text = "⟳ Refresh"
+		isRefreshing = false
+	end)
+end
+
+-- ==========================================
+-- 6. BUTTONS, DRAG, MINIMIZE ICON & RESIZE
+-- ==========================================
+trackConn(refreshBtn.MouseButton1Click:Connect(refreshServers))
+
+trackConn(resetBtn.MouseButton1Click:Connect(function()
+	resetVisited()
+	renderCards()
+	statusBar.Text = "Semua penanda server yang pernah dimasuki telah direset."
+end))
+
+trackConn(hideVisitedToggle.MouseButton1Click:Connect(function()
+	onlyUnvisited = not onlyUnvisited
+	hideVisitedToggle.Text = onlyUnvisited and "Belum Saja" or "Semua: ON"
+	hideVisitedToggle.BackgroundColor3 = onlyUnvisited and C_ACCENT or C_CARD
+	hideVisitedToggle.TextColor3 = onlyUnvisited and Color3.fromRGB(10, 15, 25) or C_TEXT
+	renderCards()
+end))
+
+trackConn(minBtn.MouseButton1Click:Connect(function()
+	miniIcon.Position = UDim2.fromOffset(
+		math.clamp(mainFrame.AbsolutePosition.X, 8, math.max(8, screenGui.AbsoluteSize.X - 56)),
+		math.clamp(mainFrame.AbsolutePosition.Y, 8, math.max(8, screenGui.AbsoluteSize.Y - 56))
+	)
+	mainFrame.Visible = false
+	miniIcon.Visible = true
+end))
+
+trackConn(closeBtn.MouseButton1Click:Connect(function()
+	_G.BlububServerHopperCleanup()
+	screenGui:Destroy()
+end))
+
+local function enableDrag(handleObj, targetObj, onTapCallback)
+	local dragging = false
+	local moved = false
+	local dragStart = Vector2.zero
+	local startPos = UDim2.new()
+
+	trackConn(handleObj.InputBegan:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			dragging = true
+			moved = false
+			dragStart = Vector2.new(input.Position.X, input.Position.Y)
+			startPos = targetObj.Position
+		end
+	end))
+
+	trackConn(handleObj.InputEnded:Connect(function(input)
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if dragging and not moved and onTapCallback then
+				onTapCallback()
+			end
+			dragging = false
+		end
+	end))
+
+	trackConn(UserInputService.InputChanged:Connect(function(input)
+		if dragging and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+			local cur = Vector2.new(input.Position.X, input.Position.Y)
+			local delta = cur - dragStart
+			if delta.Magnitude > 5 then
+				moved = true
+			end
+			local newX = math.clamp(startPos.X.Offset + delta.X, 0, math.max(0, screenGui.AbsoluteSize.X - targetObj.AbsoluteSize.X))
+			local newY = math.clamp(startPos.Y.Offset + delta.Y, 0, math.max(0, screenGui.AbsoluteSize.Y - targetObj.AbsoluteSize.Y))
+			targetObj.Position = UDim2.fromOffset(newX, newY)
+		end
+	end))
+end
+
+enableDrag(topBar, mainFrame, nil)
+enableDrag(miniIcon, miniIcon, function()
+	mainFrame.Position = UDim2.fromOffset(
+		math.clamp(miniIcon.AbsolutePosition.X, 8, math.max(8, screenGui.AbsoluteSize.X - mainFrame.AbsoluteSize.X - 8)),
+		math.clamp(miniIcon.AbsolutePosition.Y, 8, math.max(8, screenGui.AbsoluteSize.Y - mainFrame.AbsoluteSize.Y - 8))
+	)
+	miniIcon.Visible = false
+	mainFrame.Visible = true
+end)
+
+local resizing = false
+local resizeStart = Vector2.zero
+local startSize = Vector2.zero
+
+trackConn(resizeHandle.InputBegan:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = true
+		resizeStart = Vector2.new(input.Position.X, input.Position.Y)
+		startSize = Vector2.new(mainFrame.AbsoluteSize.X, mainFrame.AbsoluteSize.Y)
+	end
+end))
+
+trackConn(UserInputService.InputEnded:Connect(function(input)
+	if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+		resizing = false
+	end
+end))
+
+trackConn(UserInputService.InputChanged:Connect(function(input)
+	if resizing and (input.UserInputType == Enum.UserInputType.MouseMovement or input.UserInputType == Enum.UserInputType.Touch) then
+		local cur = Vector2.new(input.Position.X, input.Position.Y)
+		local delta = cur - resizeStart
+		local w = math.clamp(startSize.X + delta.X, MIN_W, MAX_W)
+		local h = math.clamp(startSize.Y + delta.Y, MIN_H, MAX_H)
+		mainFrame.Size = UDim2.fromOffset(w, h)
+	end
+end))
+
+-- ==========================================
+-- 7. AUTO-REFRESH LOOP
+-- ==========================================
+refreshServers()
+
+task.spawn(function()
+	while active do
+		task.wait(15)
+		if active and mainFrame.Visible and not isRefreshing then
+			refreshServers()
+		end
+	end
+end)SoundShimService
